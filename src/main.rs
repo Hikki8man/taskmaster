@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::{fs::File, process::exit};
 use std::io::Read;
 use std::env;
@@ -9,6 +10,7 @@ struct Task {
 }
 
 fn main() {
+    let default_path = PathBuf::from("tasks.yaml");
     let args: Vec<String> = env::args().collect();
 
     match args.len() {
@@ -24,7 +26,11 @@ fn main() {
         }
     }
 
-
+    let path = env::args()
+                    .nth(1)
+                    .map(PathBuf::from)
+                    .unwrap_or(default_path);
+    println!("{:?}", path);
 
     let mut file = File::open("tasks.yaml")
         .expect("Could not open file...");
