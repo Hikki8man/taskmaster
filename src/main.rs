@@ -1,9 +1,11 @@
 use std::path::PathBuf;
 use std::{fs::File, process::exit};
-use std::io::Read;
+use std::io::{Read, self};
 use std::env;
 use serde::{Serialize, Deserialize};
-
+use std::thread;
+use std::sync::mpsc::{Sender, Receiver};
+use std::sync::mpsc;
 #[derive(Serialize, Deserialize, Debug)]
 struct Task {
     cmd: String,
@@ -62,4 +64,34 @@ fn main() {
         println!("App: {0}", name);
         println!("\tStart Command: {0}", task.cmd);
     }
+
+    let (tx, rx): (Sender<String>, Receiver<String>) = mpsc::channel();
+
+    let th = thread::spawn(move || {
+        loop {
+            let mut buffer = String::new();
+            io::stdin().read_line(&mut buffer).expect("msg");
+            let input_trimed = String::from(buffer.trim_end());
+            if input_trimed == String::from("exit") {
+                return;
+            }
+            tx.send(input_trimed).expect("msg");
+        }
+    });
+
+    loop {
+        let res = rx.recv();
+        match res {
+            Ok(msg) => {
+                println!("msg received: {}", msg);
+                if msg == String::from("exit") {
+                    println!("exiting program");
+                    break;
+                }
+            }
+            _ => exit(1)
+        }
+    }
+
+    th.join().expect("");
 }
