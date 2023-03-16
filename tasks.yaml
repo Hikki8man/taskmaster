@@ -1,4 +1,3 @@
-nginx:
-  cmd: "/path/to/run_this"
-mariadb:
-  cmd: "/path/to/run_this_too -option"
+loop:
+  cmd: "bash test.sh"
+  autostart: true

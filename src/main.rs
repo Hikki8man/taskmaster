@@ -2,13 +2,16 @@ use std::path::PathBuf;
 use std::{fs::File, process::exit};
 use std::io::{Read, self};
 use std::env;
-use serde::{Serialize, Deserialize};
 use std::thread;
 use std::sync::mpsc::{Sender, Receiver};
 use std::sync::mpsc;
+use serde::{Serialize, Deserialize};
+use std::process::{Command, Stdio, Child};
+
 #[derive(Serialize, Deserialize, Debug)]
 struct Task {
     cmd: String,
+    autostart: bool,
 }
 
 macro_rules! print_exit {
@@ -60,9 +63,27 @@ fn main() {
     let tasks: std::collections::HashMap<String, Task> =
         serde_yaml::from_str(content.as_str()).unwrap();
 
+    // for(name, task) in tasks {
+    //     println!("App: {0}", name);
+    //     println!("\tStart Command: {0}", task.cmd);
+    // }
+
     for(name, task) in tasks {
         println!("App: {0}", name);
-        println!("\tStart Command: {0}", task.cmd);
+        // println!("\tStart Command: {0}", task.cmd);
+        if !task.autostart {
+            continue;
+        }
+        // println!("{:?}", task);
+        let mut vec = task.cmd.split_whitespace();
+        // println!("{:?}", vec);
+        let output = File::create("output.txt").unwrap();
+        let child = Some(Command::new(
+            vec.next().expect("msg"))
+            .args(vec)
+            .stdout(Stdio::from(output))
+            .spawn()
+            .expect("oe"));                          
     }
 
     let (tx, rx): (Sender<String>, Receiver<String>) = mpsc::channel();
@@ -71,11 +92,26 @@ fn main() {
         loop {
             let mut buffer = String::new();
             io::stdin().read_line(&mut buffer).expect("msg");
-            let input_trimed = String::from(buffer.trim_end());
-            if input_trimed == String::from("exit") {
-                return;
+            let input_vec: Vec<&str> = buffer.split_whitespace().collect();
+            println!("input: {:?}", input_vec);
+            if input_vec.is_empty() {
+                continue;
             }
-            tx.send(input_trimed).expect("msg");
+            match input_vec[0] {
+                "start" => {
+
+                }
+                "stop" => {
+                    println!("msg: {:?}", input_vec);
+                }
+                "exit" => {
+                    break;
+                }
+                _ => {
+
+                }
+            }
+            // tx.send(input_trimed).expect("msg");
         }
     });
 
@@ -83,11 +119,6 @@ fn main() {
         let res = rx.recv();
         match res {
             Ok(msg) => {
-                println!("msg received: {}", msg);
-                if msg == String::from("exit") {
-                    println!("exiting program");
-                    break;
-                }
             }
             _ => exit(1)
         }
