@@ -1,3 +1,4 @@
 loop:
   cmd: "bash test.sh"
   autostart: true
+  numprocs: 3

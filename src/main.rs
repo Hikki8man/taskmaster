@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::{fs::File, process::exit};
 use std::io::{Read, self};
-use std::env;
+use std::{env, process};
 use std::thread;
 use std::sync::mpsc::{Sender, Receiver};
 use std::sync::mpsc;
@@ -12,6 +12,19 @@ use std::process::{Command, Stdio, Child};
 struct Task {
     cmd: String,
     autostart: bool,
+    numprocs: i32,
+}
+
+#[derive(Debug)]
+struct Process {
+    pid: Vec<Child>,
+    task: Task,
+}
+
+impl Process {
+    fn new(task: Task) -> Process {
+        Process { pid: Vec::new(), task }
+    }
 }
 
 macro_rules! print_exit {
@@ -63,29 +76,36 @@ fn main() {
     let tasks: std::collections::HashMap<String, Task> =
         serde_yaml::from_str(content.as_str()).unwrap();
 
-    // for(name, task) in tasks {
-    //     println!("App: {0}", name);
-    //     println!("\tStart Command: {0}", task.cmd);
-    // }
+    let mut process: std::collections::HashMap<String, Process> = std::collections::HashMap::new();
 
     for(name, task) in tasks {
-        println!("App: {0}", name);
+        // println!("App: {0}", name);
         // println!("\tStart Command: {0}", task.cmd);
-        if !task.autostart {
-            continue;
-        }
-        // println!("{:?}", task);
-        let mut vec = task.cmd.split_whitespace();
-        // println!("{:?}", vec);
-        let output = File::create("output.txt").unwrap();
-        let child = Some(Command::new(
-            vec.next().expect("msg"))
-            .args(vec)
-            .stdout(Stdio::from(output))
-            .spawn()
-            .expect("oe"));                          
+        process.insert(name, Process::new(task));
     }
 
+    for(name, mut process) in process {
+        println!("App: {:?}", process);
+        // println!("\tStart Command: {0}", task.cmd);
+        if !process.task.autostart {
+            continue;
+        }
+        let mut vec = process.task.cmd.split_whitespace();
+        
+        let output = File::create("output.txt").unwrap();
+        let cmd_str = vec.next().expect("msg");
+        let mut cmd = Command::new(cmd_str);
+        cmd.stdout(Stdio::from(output));
+        cmd.args(vec);
+    // .spawn()
+    // .expect("oe");
+        let mut i = 0;
+        while i < process.task.numprocs {
+            println!("number of pro: {}", process.task.numprocs);
+            let child = cmd.spawn().expect("msg");
+            process.pid.push(child);
+        }
+    }
     let (tx, rx): (Sender<String>, Receiver<String>) = mpsc::channel();
 
     let th = thread::spawn(move || {
@@ -103,6 +123,9 @@ fn main() {
                 }
                 "stop" => {
                     println!("msg: {:?}", input_vec);
+                    if input_vec.len() > 1 {
+                        tx.send(input_vec[1].to_string()).expect("msg");
+                    }
                 }
                 "exit" => {
                     break;
