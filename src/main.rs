@@ -70,39 +70,44 @@ fn main() {
 		
 	// let tasks: std::collections::HashMap<String, Task> =
 	//	 serde_yaml::from_str(content.as_str()).unwrap();
-	let result: Result<std::collections::HashMap<String, Task>, serde_yaml::Error> =
-		serde_yaml::from_str(content.as_str());
-	match result {
-		Ok(tasks) => {
-			for (name, task) in tasks {
-				println!("App: {}", name);
-				println!("\tStart Command: {}", task.cmd);
-				println!("\tNumber of Processes: {}", task.numprocs);
-				println!("\tUmask: {}", task.umask);
-				println!("\tWorking Directory: {}", task.workingdir);
-				println!("\tAutostart: {}", task.autostart);
-				println!("\tAutorestart: {}", task.autorestart);
-				println!("\tExitcodes:");
-				for code in task.exitcodes {
-					println!("\t\t- {}", code);
-				}
-				println!("\tStart Retries: {}", task.startretries);
-				println!("\tStart Time: {}", task.starttime);
-				println!("\tStop Signal: {}", task.stopsignal);
-				println!("\tStop Time: {}", task.stoptime);
-				println!("\tNormal Output: {}", task.stdout);
-				println!("\tError Output: {}", task.stderr);
-				if let Some(env) = task.env {
-					println!("\tEnv: ");
-					for (key, value) in env {
-						println!("\t\t- {}: {}", key, value);
-					}
-				}
-			}
+	let tasks: std::collections::HashMap<String, Task>;
+	// let result: Result<std::collections::HashMap<String, Task>, serde_yaml::Error> =
+	// 	serde_yaml::from_str(content.as_str());
+	match serde_yaml::from_str(content.as_str()) {
+		Ok(results) => {
+			tasks = results;
 		},
 		Err(e) => {
 				print_exit!(format!("Configuration file error: {}", e), 1);
 		}
 	}
+
+	//print tasks data
+	for (name, task) in tasks {
+		println!("App: {}", name);
+		println!("\tStart Command: {}", task.cmd);
+		println!("\tNumber of Processes: {}", task.numprocs);
+		println!("\tUmask: {}", task.umask);
+		println!("\tWorking Directory: {}", task.workingdir);
+		println!("\tAutostart: {}", task.autostart);
+		println!("\tAutorestart: {}", task.autorestart);
+		println!("\tExitcodes:");
+		for code in task.exitcodes {
+			println!("\t\t- {}", code);
+		}
+		println!("\tStart Retries: {}", task.startretries);
+		println!("\tStart Time: {}", task.starttime);
+		println!("\tStop Signal: {}", task.stopsignal);
+		println!("\tStop Time: {}", task.stoptime);
+		println!("\tNormal Output: {}", task.stdout);
+		println!("\tError Output: {}", task.stderr);
+		if let Some(env) = task.env {
+			println!("\tEnv: ");
+			for (key, value) in env {
+				println!("\t\t- {}: {}", key, value);
+			}
+		}
+	}
+
 	exit (-1);
 }
