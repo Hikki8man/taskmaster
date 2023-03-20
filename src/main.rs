@@ -17,13 +17,14 @@ struct Task {
 
 #[derive(Debug)]
 struct Process {
-    pid: Vec<Child>,
+    child: Vec<Child>,
     task: Task,
+    cmd: Command,
 }
 
 impl Process {
-    fn new(task: Task) -> Process {
-        Process { pid: Vec::new(), task }
+    fn new(task: Task, cmd: Command) -> Process {
+        Process { child: Vec::new(), task, cmd }
     }
 }
 
@@ -76,36 +77,30 @@ fn main() {
     let tasks: std::collections::HashMap<String, Task> =
         serde_yaml::from_str(content.as_str()).unwrap();
 
-    let mut process: std::collections::HashMap<String, Process> = std::collections::HashMap::new();
+    let mut processes: std::collections::HashMap<String, Process> = std::collections::HashMap::new();
 
     for(name, task) in tasks {
-        // println!("App: {0}", name);
-        // println!("\tStart Command: {0}", task.cmd);
-        process.insert(name, Process::new(task));
-    }
 
-    for(name, mut process) in process {
-        println!("App: {:?}", process);
-        // println!("\tStart Command: {0}", task.cmd);
-        if !process.task.autostart {
-            continue;
-        }
-        let mut vec = process.task.cmd.split_whitespace();
-        
+        let mut vec = task.cmd.split_whitespace();
         let output = File::create("output.txt").unwrap();
         let cmd_str = vec.next().expect("msg");
         let mut cmd = Command::new(cmd_str);
         cmd.stdout(Stdio::from(output));
         cmd.args(vec);
-    // .spawn()
-    // .expect("oe");
-        let mut i = 0;
-        while i < process.task.numprocs {
-            println!("number of pro: {}", process.task.numprocs);
-            let child = cmd.spawn().expect("msg");
-            process.pid.push(child);
+
+        let mut process = Process::new(task, cmd);
+        if process.task.autostart {
+            let mut i = 0;
+            while i < process.task.numprocs {
+                println!("number of pro: {}", process.task.numprocs);
+                let child = process.cmd.spawn().expect("msg");
+                process.child.push(child);
+                i += 1;
+            }
         }
+        processes.insert(name, process);
     }
+
     let (tx, rx): (Sender<String>, Receiver<String>) = mpsc::channel();
 
     let th = thread::spawn(move || {
@@ -139,12 +134,29 @@ fn main() {
     });
 
     loop {
-        let res = rx.recv();
-        match res {
-            Ok(msg) => {
+        for (name, mut process) in processes.iter_mut() {
+            let mut i = 0;
+            while i < process.child.len() {
+                match process.child[i].try_wait() {
+                    Ok(Some(status)) => {
+                        println!("exited with: {status}");
+                        process.child.remove(i);
+                        if (process.task.autostart) {// autorestart
+                            process.cmd.spawn().expect("iuiui");
+                        }
+                    }
+                    Ok(None) => {}
+                    Err(e) => println!("error attempting to wait: {e}"),
+                }
+                i += 1;
             }
-            _ => exit(1)
         }
+        // let res = rx.recv();
+        // match res {
+        //     Ok(msg) => {
+        //     }
+        //     _ => exit(1)
+        // }
     }
 
     th.join().expect("");
