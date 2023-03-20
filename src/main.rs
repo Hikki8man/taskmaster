@@ -10,13 +10,20 @@ use serde::{Serialize, Deserialize};
 use std::process::{Command, Stdio, Child};
 
 #[derive(Serialize, Deserialize, Debug)]
+enum Autorestart {
+	always,
+	unexpected,
+	never,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 struct Task {
 	cmd: String,
 	numprocs: u32,
 	umask: String,
 	workingdir: String,
 	autostart: bool,
-	autorestart: String,
+	autorestart: Autorestart,
 	exitcodes: Vec<u8>,
 	startretries: u32,
 	starttime: u32,
