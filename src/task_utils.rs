@@ -3,9 +3,9 @@ use serde::{Serialize, Deserialize};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum Autorestart {
-	always,
-	unexpected,
-	never,
+	Always,
+	Unexpected,
+	Never,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -51,7 +51,7 @@ pub struct Task {
 	pub workingdir: String,
 	pub autostart: bool,
 	pub autorestart: Autorestart,
-	pub exitcodes: Vec<u8>,
+	pub exitcodes: Vec<i32>,
 	pub startretries: u32,
 	pub starttime: u32,
 	pub stopsignal: Sigtype,
