@@ -1,4 +1,7 @@
-use std::collections::HashMap;
+mod task_utils;
+
+use task_utils::print_tasks;
+use task_utils::Task;
 use std::path::PathBuf;
 use std::{fs::File, process::exit};
 use std::io::{Read, self};
@@ -6,26 +9,7 @@ use std::{env, process};
 use std::thread;
 use std::sync::mpsc::{Sender, Receiver};
 use std::sync::mpsc;
-use serde::{Serialize, Deserialize};
 use std::process::{Command, Stdio, Child};
-
-#[derive(Serialize, Deserialize, Debug)]
-struct Task {
-	cmd: String,
-	numprocs: u32,
-	umask: String,
-	workingdir: String,
-	autostart: bool,
-	autorestart: String,
-	exitcodes: Vec<i32>,
-	startretries: u32,
-	starttime: u32,
-	stopsignal: String,
-	stoptime: u32,
-	stdout: String,
-	stderr: String,
-	env: Option<HashMap<String, String>>,
-}
 
 #[derive(Debug)]
 struct Process {
@@ -136,6 +120,9 @@ fn main() {
 		}
 	}
 
+	//print tasks data
+	print_tasks(&tasks);
+  
     let mut processes: std::collections::HashMap<String, Process> = std::collections::HashMap::new();
 
     for(name, task) in tasks {
