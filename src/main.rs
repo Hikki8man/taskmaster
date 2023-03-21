@@ -17,7 +17,7 @@ struct Task {
 	workingdir: String,
 	autostart: bool,
 	autorestart: String,
-	exitcodes: Vec<u8>,
+	exitcodes: Vec<i32>,
 	startretries: u32,
 	starttime: u32,
 	stopsignal: String,
@@ -34,6 +34,16 @@ struct Process {
     cmd: Command,
 }
 
+enum CommandName {
+	START,
+	STOP,
+}
+
+struct Cmd {
+	name: CommandName,
+	arg: String,
+}
+
 impl Process {
     fn new(task: Task, cmd: Command) -> Process {
         Process { child: Vec::new(), task, cmd }
@@ -45,6 +55,33 @@ macro_rules! print_exit {
 		println!("{}", $err_msg);
 		exit($err_code);
 	};
+}
+
+fn execute_cmd(cmd: Cmd, process: &mut Process) {
+    match cmd.name {
+        CommandName::START => {
+            let numprocs: usize = process.task.numprocs as usize;
+            if process.child.len() == numprocs {
+                println!("{} already running", cmd.arg);
+                return;
+            }
+            println!("starting {} ...", cmd.arg);
+            let mut i = 0;
+            while process.child.len() < numprocs {
+                process.child.push(process.cmd.spawn().expect("msg"));
+                i += 1;
+            }
+        }
+        CommandName::STOP => {
+            println!("stopping {} ...", cmd.arg);
+            let mut i = 0;
+            while i < process.child.len() {
+                process.child[i].kill();
+                process.child.remove(i);
+                i += 1;
+            }
+        }
+    }
 }
 
 fn main() {
@@ -99,33 +136,6 @@ fn main() {
 		}
 	}
 
-	//print tasks data
-	// for (name, task) in tasks {
-	// 	println!("App: {}", name);
-	// 	println!("\tStart Command: {}", task.cmd);
-	// 	println!("\tNumber of Processes: {}", task.numprocs);
-	// 	println!("\tUmask: {}", task.umask);
-	// 	println!("\tWorking Directory: {}", task.workingdir);
-	// 	println!("\tAutostart: {}", task.autostart);
-	// 	println!("\tAutorestart: {}", task.autorestart);
-	// 	println!("\tExitcodes:");
-	// 	for code in task.exitcodes {
-	// 		println!("\t\t- {}", code);
-	// 	}
-	// 	println!("\tStart Retries: {}", task.startretries);
-	// 	println!("\tStart Time: {}", task.starttime);
-	// 	println!("\tStop Signal: {}", task.stopsignal);
-	// 	println!("\tStop Time: {}", task.stoptime);
-	// 	println!("\tNormal Output: {}", task.stdout);
-	// 	println!("\tError Output: {}", task.stderr);
-	// 	if let Some(env) = task.env {
-	// 		println!("\tEnv: ");
-	// 		for (key, value) in env {
-	// 			println!("\t\t- {}: {}", key, value);
-	// 		}
-	// 	}
-	// }
-
     let mut processes: std::collections::HashMap<String, Process> = std::collections::HashMap::new();
 
     for(name, task) in tasks {
@@ -150,7 +160,7 @@ fn main() {
         processes.insert(name, process);
     }
 
-    let (tx, rx): (Sender<String>, Receiver<String>) = mpsc::channel();
+    let (tx, rx): (Sender<Cmd>, Receiver<Cmd>) = mpsc::channel();
 
     let th = thread::spawn(move || {
         loop {
@@ -163,12 +173,15 @@ fn main() {
             }
             match input_vec[0] {
                 "start" => {
-
+                    if input_vec.len() > 1 {
+						let cmd: Cmd = Cmd { name: CommandName::START, arg: String::from(input_vec[1]) };
+                        tx.send(cmd).expect("msg");
+                    }
                 }
                 "stop" => {
-                    println!("msg: {:?}", input_vec);
                     if input_vec.len() > 1 {
-                        tx.send(input_vec[1].to_string()).expect("msg");
+						let cmd: Cmd = Cmd { name: CommandName::STOP, arg: String::from(input_vec[1]) };
+                        tx.send(cmd).expect("msg");
                     }
                 }
                 "exit" => {
@@ -190,8 +203,8 @@ fn main() {
                     Ok(Some(status)) => {
                         println!("exited with: {status}");
                         process.child.remove(i);
-                        if (process.task.autostart) {// autorestart
-                            process.cmd.spawn().expect("iuiui");
+                        if (process.task.autorestart == "always") || (process.task.autorestart == "unexpected" && !process.task.exitcodes.contains(&status.code().unwrap())) {
+                            process.child.push(process.cmd.spawn().expect("iuiui"));
                         }
                     }
                     Ok(None) => {}
@@ -200,12 +213,17 @@ fn main() {
                 i += 1;
             }
         }
-        // let res = rx.recv();
-        // match res {
-        //     Ok(msg) => {
-        //     }
-        //     _ => exit(1)
-        // }
+        let res = rx.try_recv();
+        match res {
+            Ok(cmd) => {
+                if let Some(mut proc) = processes.get_mut(cmd.arg.as_str()) {
+                    execute_cmd(cmd, &mut proc);
+                } else {
+                    println!("process not found");
+                }
+            }
+            _ => {},
+        }
     }
 
     th.join().expect("");
