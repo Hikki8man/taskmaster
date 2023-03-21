@@ -11,6 +11,8 @@ use std::sync::mpsc::{Sender, Receiver};
 use std::sync::mpsc;
 use std::process::{Command, Stdio, Child};
 
+use crate::task_utils::Autorestart;
+
 #[derive(Debug)]
 struct Process {
     child: Vec<Child>,
@@ -190,8 +192,14 @@ fn main() {
                     Ok(Some(status)) => {
                         println!("exited with: {status}");
                         process.child.remove(i);
-                        if (process.task.autorestart == "always") || (process.task.autorestart == "unexpected" && !process.task.exitcodes.contains(&status.code().unwrap())) {
-                            process.child.push(process.cmd.spawn().expect("iuiui"));
+                        match process.task.autorestart {
+                            Autorestart::Always => process.child.push(process.cmd.spawn().expect("iuiui")),
+                            Autorestart::Unexpected => {
+                                if !process.task.exitcodes.contains(&status.code().unwrap()) {
+                                    process.child.push(process.cmd.spawn().expect("iuiui"));
+                                }
+                            }
+                            Autorestart::Never => {}
                         }
                     }
                     Ok(None) => {}
