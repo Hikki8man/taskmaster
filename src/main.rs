@@ -3,6 +3,7 @@ mod task_utils;
 use task_utils::print_tasks;
 use task_utils::Task;
 use std::path::PathBuf;
+use std::time::Duration;
 use std::{fs::File, process::exit};
 use std::io::{Read, self};
 use std::{env, process};
@@ -18,21 +19,33 @@ struct Process {
     child: Vec<Child>,
     task: Task,
     cmd: Command,
+    status: Status,
 }
 
 enum CommandName {
 	START,
 	STOP,
 }
-
-struct Cmd {
+#[derive(Debug)]
+enum Status {
+    Starting,
+    Running,
+    Stopping,
+    Stopped,
+}
+//TODO make msg more generic to change process status
+struct Message {
+    cmd_input: Option<CmdInput>,
+    status_update: Option<Status>,
+}
+struct CmdInput {
 	name: CommandName,
 	arg: String,
 }
 
 impl Process {
     fn new(task: Task, cmd: Command) -> Process {
-        Process { child: Vec::new(), task, cmd }
+        Process { child: Vec::new(), task, cmd, status: Status::Stopped }
     }
 }
 
@@ -43,7 +56,7 @@ macro_rules! print_exit {
 	};
 }
 
-fn execute_cmd(cmd: Cmd, process: &mut Process) {
+fn execute_cmd(cmd: CmdInput, process: &mut Process) {
     match cmd.name {
         CommandName::START => {
             let numprocs: usize = process.task.numprocs as usize;
@@ -52,20 +65,33 @@ fn execute_cmd(cmd: Cmd, process: &mut Process) {
                 return;
             }
             println!("starting {} ...", cmd.arg);
-            let mut i = 0;
             while process.child.len() < numprocs {
                 process.child.push(process.cmd.spawn().expect("msg"));
-                i += 1;
             }
         }
         CommandName::STOP => {
+            if process.child.is_empty() {
+                println!("{} is not running", cmd.arg);
+                return;
+            }
             println!("stopping {} ...", cmd.arg);
             let mut i = 0;
+            let mut kill = Command::new("kill");
+            process.status = Status::Starting;
             while i < process.child.len() {
-                process.child[i].kill();
+                kill.args(["-s", "TERM", process.child[i].id().to_string().as_str()]);
+                let mut pid = kill.spawn().expect("msg");
+                pid.wait().expect("msg");
                 process.child.remove(i);
                 i += 1;
             }
+            let stop_time = process.task.stoptime.into();
+            thread::spawn(move || {
+                thread::sleep(Duration::from_secs(stop_time));
+                // process.status = Status::Running;
+                println!("{} stopped", cmd.arg);
+            });
+            
         }
     }
 }
@@ -123,53 +149,56 @@ fn main() {
 	}
 
 	//print tasks data
-	print_tasks(&tasks);
+	// print_tasks(&tasks);
   
     let mut processes: std::collections::HashMap<String, Process> = std::collections::HashMap::new();
 
     for(name, task) in tasks {
 
         let mut vec = task.cmd.split_whitespace();
-        let output = File::create("output.txt").unwrap();
+        let stdout = File::create(task.stdout.as_str()).unwrap();
+        let stderr = File::create(task.stderr.as_str()).unwrap();
         let cmd_str = vec.next().expect("msg");
         let mut cmd = Command::new(cmd_str);
-        cmd.stdout(Stdio::from(output));
+        cmd.stdout(stdout);
+        cmd.stderr(stderr);
         cmd.args(vec);
+        cmd.current_dir(task.workingdir.as_str());
 
         let mut process = Process::new(task, cmd);
         if process.task.autostart {
-            let mut i = 0;
-            while i < process.task.numprocs {
-                println!("number of pro: {}", process.task.numprocs);
-                let child = process.cmd.spawn().expect("msg");
-                process.child.push(child);
-                i += 1;
-            }
+            execute_cmd(CmdInput { name: CommandName::START, arg: String::from(&name) }, &mut process);
+            // let mut i = 0;
+            // while i < process.task.numprocs {
+            //     let child = process.cmd.spawn().expect("msg");
+            //     process.child.push(child);
+            //     i += 1;
+            // }
+            // process.status = Status::Starting;
         }
         processes.insert(name, process);
     }
 
-    let (tx, rx): (Sender<Cmd>, Receiver<Cmd>) = mpsc::channel();
+    let (tx, rx): (Sender<CmdInput>, Receiver<CmdInput>) = mpsc::channel();
 
     let th = thread::spawn(move || {
         loop {
             let mut buffer = String::new();
             io::stdin().read_line(&mut buffer).expect("msg");
             let input_vec: Vec<&str> = buffer.split_whitespace().collect();
-            println!("input: {:?}", input_vec);
             if input_vec.is_empty() {
                 continue;
             }
             match input_vec[0] {
                 "start" => {
                     if input_vec.len() > 1 {
-						let cmd: Cmd = Cmd { name: CommandName::START, arg: String::from(input_vec[1]) };
+						let cmd: CmdInput = CmdInput { name: CommandName::START, arg: String::from(input_vec[1]) };
                         tx.send(cmd).expect("msg");
                     }
                 }
                 "stop" => {
                     if input_vec.len() > 1 {
-						let cmd: Cmd = Cmd { name: CommandName::STOP, arg: String::from(input_vec[1]) };
+						let cmd: CmdInput = CmdInput { name: CommandName::STOP, arg: String::from(input_vec[1]) };
                         tx.send(cmd).expect("msg");
                     }
                 }
@@ -180,7 +209,6 @@ fn main() {
 
                 }
             }
-            // tx.send(input_trimed).expect("msg");
         }
     });
 
@@ -190,7 +218,7 @@ fn main() {
             while i < process.child.len() {
                 match process.child[i].try_wait() {
                     Ok(Some(status)) => {
-                        println!("exited with: {status}");
+                        // println!("exited with: {status}");
                         process.child.remove(i);
                         match process.task.autorestart {
                             Autorestart::Always => process.child.push(process.cmd.spawn().expect("iuiui")),

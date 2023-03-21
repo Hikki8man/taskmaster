@@ -2,9 +2,9 @@ loop:
   cmd: "bash test.sh"
   numprocs: 1
   umask: 0022
-  workingdir: "/tmp"
+  workingdir: "."
   autostart: true
-  autorestart: always
+  autorestart: Always
   exitcodes:
     - 0
   startretries: 3
@@ -12,5 +12,5 @@ loop:
   stopsignal: TERM
   stoptime: 10
   stdout: output.txt
-  stderr: /tmp/nginx.stderr
+  stderr: err.txt
 
