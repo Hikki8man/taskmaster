@@ -9,6 +9,41 @@ pub enum Autorestart {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+pub enum Sigtype {
+	HUP,
+	INT,
+	QUIT,
+	ILL,
+	TRAP,
+	ABRT,
+	EMT,
+	FPE,
+	KILL,
+	BUS,
+	SEGV,
+	SYS,
+	PIPE,
+	ALRM,
+	TERM,
+	URG,
+	STOP,
+	TSTP,
+	CONT,
+	CHLD,
+	TTIN,
+	TTOU,
+	IO,
+	XCPU,
+	XFSZ,
+	VTALRM,
+	PROF,
+	WINCH,
+	INFO,
+	USR1,
+	USR2,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Task {
 	pub cmd: String,
 	pub numprocs: u32,
@@ -19,7 +54,7 @@ pub struct Task {
 	pub exitcodes: Vec<u8>,
 	pub startretries: u32,
 	pub starttime: u32,
-	pub stopsignal: String,
+	pub stopsignal: Sigtype,
 	pub stoptime: u32,
 	pub stdout: String,
 	pub stderr: String,
@@ -41,7 +76,7 @@ pub fn print_tasks(tasks: &HashMap<String, Task>) {
 		}
 		println!("\tStart Retries: {}", task.startretries);
 		println!("\tStart Time: {}", task.starttime);
-		println!("\tStop Signal: {}", task.stopsignal);
+		println!("\tStop Signal: {:?}", task.stopsignal);
 		println!("\tStop Time: {}", task.stoptime);
 		println!("\tNormal Output: {}", task.stdout);
 		println!("\tError Output: {}", task.stderr);
