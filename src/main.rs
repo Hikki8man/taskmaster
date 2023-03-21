@@ -1,4 +1,7 @@
-use std::collections::HashMap;
+mod task_utils;
+
+use task_utils::print_tasks;
+use task_utils::Task;
 use std::path::PathBuf;
 use std::{fs::File, process::exit};
 use std::io::{Read, self};
@@ -6,33 +9,8 @@ use std::{env, process};
 use std::thread;
 use std::sync::mpsc::{Sender, Receiver};
 use std::sync::mpsc;
-use serde::{Serialize, Deserialize};
 use std::process::{Command, Stdio, Child};
 
-#[derive(Serialize, Deserialize, Debug)]
-enum Autorestart {
-	always,
-	unexpected,
-	never,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-struct Task {
-	cmd: String,
-	numprocs: u32,
-	umask: String,
-	workingdir: String,
-	autostart: bool,
-	autorestart: Autorestart,
-	exitcodes: Vec<u8>,
-	startretries: u32,
-	starttime: u32,
-	stopsignal: String,
-	stoptime: u32,
-	stdout: String,
-	stderr: String,
-	env: Option<HashMap<String, String>>,
-}
 
 #[derive(Debug)]
 struct Process {
@@ -107,31 +85,7 @@ fn main() {
 	}
 
 	//print tasks data
-	// for (name, task) in tasks {
-	// 	println!("App: {}", name);
-	// 	println!("\tStart Command: {}", task.cmd);
-	// 	println!("\tNumber of Processes: {}", task.numprocs);
-	// 	println!("\tUmask: {}", task.umask);
-	// 	println!("\tWorking Directory: {}", task.workingdir);
-	// 	println!("\tAutostart: {}", task.autostart);
-	// 	println!("\tAutorestart: {}", task.autorestart);
-	// 	println!("\tExitcodes:");
-	// 	for code in task.exitcodes {
-	// 		println!("\t\t- {}", code);
-	// 	}
-	// 	println!("\tStart Retries: {}", task.startretries);
-	// 	println!("\tStart Time: {}", task.starttime);
-	// 	println!("\tStop Signal: {}", task.stopsignal);
-	// 	println!("\tStop Time: {}", task.stoptime);
-	// 	println!("\tNormal Output: {}", task.stdout);
-	// 	println!("\tError Output: {}", task.stderr);
-	// 	if let Some(env) = task.env {
-	// 		println!("\tEnv: ");
-	// 		for (key, value) in env {
-	// 			println!("\t\t- {}: {}", key, value);
-	// 		}
-	// 	}
-	// }
+	print_tasks(&tasks);
 
     let mut processes: std::collections::HashMap<String, Process> = std::collections::HashMap::new();
 
@@ -197,7 +151,7 @@ fn main() {
                     Ok(Some(status)) => {
                         println!("exited with: {status}");
                         process.child.remove(i);
-                        if (process.task.autostart) {// autorestart
+                        if process.task.autostart {// autorestart
                             process.cmd.spawn().expect("iuiui");
                         }
                     }

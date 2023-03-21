@@ -1,0 +1,55 @@
+use std::collections::HashMap;
+use serde::{Serialize, Deserialize};
+
+#[derive(Serialize, Deserialize, Debug)]
+pub enum Autorestart {
+	always,
+	unexpected,
+	never,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Task {
+	pub cmd: String,
+	pub numprocs: u32,
+	pub umask: String,
+	pub workingdir: String,
+	pub autostart: bool,
+	pub autorestart: Autorestart,
+	pub exitcodes: Vec<u8>,
+	pub startretries: u32,
+	pub starttime: u32,
+	pub stopsignal: String,
+	pub stoptime: u32,
+	pub stdout: String,
+	pub stderr: String,
+	pub env: Option<HashMap<String, String>>,
+}
+
+pub fn print_tasks(tasks: &HashMap<String, Task>) {
+    for (name, task) in tasks {
+		println!("App: {}", name);
+		println!("\tStart Command: {}", task.cmd);
+		println!("\tNumber of Processes: {}", task.numprocs);
+		println!("\tUmask: {}", task.umask);
+		println!("\tWorking Directory: {}", task.workingdir);
+		println!("\tAutostart: {}", task.autostart);
+		println!("\tAutorestart: {:?}", task.autorestart);
+		println!("\tExitcodes:");
+		for code in &task.exitcodes {
+			println!("\t\t- {}", code);
+		}
+		println!("\tStart Retries: {}", task.startretries);
+		println!("\tStart Time: {}", task.starttime);
+		println!("\tStop Signal: {}", task.stopsignal);
+		println!("\tStop Time: {}", task.stoptime);
+		println!("\tNormal Output: {}", task.stdout);
+		println!("\tError Output: {}", task.stderr);
+		if let Some(env) = &task.env {
+			println!("\tEnv: ");
+			for (key, value) in env {
+				println!("\t\t- {}: {}", key, value);
+			}
+		}
+	}
+}
