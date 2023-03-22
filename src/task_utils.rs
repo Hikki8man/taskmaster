@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
 
+use crate::Process;
+
 #[derive(Serialize, Deserialize, Debug)]
 pub enum Autorestart {
 	Always,
@@ -86,5 +88,13 @@ pub fn print_tasks(tasks: &HashMap<String, Task>) {
 				println!("\t\t- {}: {}", key, value);
 			}
 		}
+	}
+}
+
+pub fn print_processes(processes: &HashMap<String, Process>) {
+    for (name, process) in processes {
+		println!("----------------------------------------------------------");
+		println!("Task: {} ------ Status: {:?}", name, process.status);
+		println!("----------------------------------------------------------");
 	}
 }
