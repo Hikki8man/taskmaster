@@ -13,4 +13,3 @@ loop:
   stoptime: 10
   stdout: output.txt
   stderr: /tmp/nginx.stderr
-

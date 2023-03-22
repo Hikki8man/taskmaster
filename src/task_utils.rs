@@ -45,6 +45,7 @@ pub enum Sigtype {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+#[serde(deny_unknown_fields)]
 pub struct Task {
 	pub cmd: String,
 	pub numprocs: u32,
