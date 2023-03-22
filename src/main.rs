@@ -175,9 +175,9 @@ fn main() {
 		
 	// let tasks: std::collections::HashMap<String, Task> =
 	//	 serde_yaml::from_str(content.as_str()).unwrap();
-	let tasks: std::collections::HashMap<String, Task>;
 	// let result: Result<std::collections::HashMap<String, Task>, serde_yaml::Error> =
 	// 	serde_yaml::from_str(content.as_str());
+	let tasks: std::collections::BTreeMap<String, Task>;
 	match serde_yaml::from_str(content.as_str()) {
 		Ok(results) => {
 			tasks = results;
