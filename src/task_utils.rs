@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use serde::{Serialize, Deserialize};
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -60,10 +60,10 @@ pub struct Task {
 	pub stoptime: u32,
 	pub stdout: String,
 	pub stderr: String,
-	pub env: Option<HashMap<String, String>>,
+	pub env: Option<BTreeMap<String, String>>,
 }
 
-pub fn print_tasks(tasks: &HashMap<String, Task>) {
+pub fn print_tasks(tasks: &BTreeMap<String, Task>) {
     for (name, task) in tasks {
 		println!("App: {}", name);
 		println!("\tStart Command: {}", task.cmd);
