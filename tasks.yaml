@@ -1,5 +1,5 @@
 loop:
-  cmd: "bash test1.sh"
+  cmd: "bash test.sh"
   numprocs: 1
   umask: 0022
   workingdir: "."
@@ -14,3 +14,18 @@ loop:
   stdout: output.txt
   stderr: err.txt
 
+la_tache:
+  cmd: "bash test1.sh"
+  numprocs: 1
+  umask: 0022
+  workingdir: "."
+  autostart: true
+  autorestart: Always
+  exitcodes:
+    - 0
+  startretries: 3
+  starttime: 1
+  stopsignal: TERM
+  stoptime: 2
+  stdout: output2.txt
+  stderr: err.txt

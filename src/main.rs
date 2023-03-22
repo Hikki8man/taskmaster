@@ -129,11 +129,6 @@ fn execute_cmd(cmd: CmdInput, process: &mut Process, sender: Sender<Message>) {
             thread::spawn(move || {
                 thread::sleep(Duration::from_secs(restart_time.into()));
                 sender.send(Message { cmd_input: cmd, status_update: Some(Status::Running) }).expect("msg");
-                // let cmd = CmdInput {
-                //     name: CommandName::START,
-                //     arg: String::from(cmd.arg),
-                // };
-                // sender.send(Message { cmd_input: cmd, status_update: None }).expect("msg");
             });
         }
         _ => {}
