@@ -4,7 +4,7 @@ loop:
   umask: 0022
   workingdir: "."
   autostart: true
-  autorestart: Always
+  autorestart: always
   exitcodes:
     - 0
   startretries: 3
@@ -20,7 +20,7 @@ la_tache:
   umask: 0022
   workingdir: "."
   autostart: true
-  autorestart: Always
+  autorestart: always
   exitcodes:
     - 0
   startretries: 3

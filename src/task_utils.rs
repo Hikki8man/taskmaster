@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use serde::{Serialize, Deserialize};
 
 use crate::Process;
