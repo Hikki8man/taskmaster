@@ -1,7 +1,7 @@
 use std::collections::{HashMap, BTreeMap};
 use serde::{Serialize, Deserialize};
 
-use crate::Process;
+use crate::{Process, Status};
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "snake_case")]
@@ -94,9 +94,17 @@ pub fn print_tasks(tasks: &BTreeMap<String, Task>) {
 }
 
 pub fn print_processes(processes: &HashMap<String, Process>) {
+	// println!("Task List:");
+	println!("[Task Name]\t-\t[Status]");
+	println!("--------------------------------");
     for (name, process) in processes {
-		println!("----------------------------------------------------------");
-		println!("Task: {} ------ Status: {:?}", name, process.status);
-		println!("----------------------------------------------------------");
+		let status = match &process.status {
+			Status::Running => "\x1B[32mRunning\x1B[0m",
+			Status::Stopping => "\x1B[31mStopping\x1B[0m",
+			Status::Stopped => "\x1b[30mStopped\x1B[0m",
+			Status::Restarting => "\x1B[33mRestarting\x1B[0m",
+			_ => "\x1B[33mStarting\x1B[0m",
+		};
+		println!("{:<10}\t-\t{}", name, status);
 	}
 }

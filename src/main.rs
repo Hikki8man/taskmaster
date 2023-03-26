@@ -32,7 +32,7 @@ enum CommandName {
     STATUS,
 }
 #[derive(Debug)]
-enum Status {
+pub enum Status {
     Starting,
     Running,
     Stopping,
