@@ -3,37 +3,57 @@ mod terminal;
 mod command;
 
 use task_utils::print_tasks;
-use task_utils::Task;
+use task_utils::Config;
+use std::clone;
+// use std::os::linux::process;
 use std::path::PathBuf;
-use std::time::Duration;
 use std::{fs::File, process::exit};
-use std::io::{Read, self};
-use std::{env, process};
+use std::io::{Read};
+use std::{env};
 use std::thread;
 use std::sync::mpsc::{Sender, Receiver};
 use std::sync::mpsc;
-use std::process::{Command, Stdio, Child};
+use std::process::{Command, Child};
 
 use crate::task_utils::Autorestart;
 use crate::command::execute_cmd;
-use crate::task_utils::print_processes;
 use crate::terminal::read_input;
 
 #[derive(Debug)]
-pub struct Process {
-    child: Vec<Child>,
-    task: Task,
+pub struct Task {
+    processes: Vec<Process>,
+    config: Config,
     cmd: Command,
-    status: Status,
+    // status: Status,
+    // retries: u32
 }
-#[derive(Copy, Clone, PartialEq)]
+
+#[derive(Debug)]
+struct Process {
+    id: u32,
+    child: Option<Child>,
+    status: Status,
+    retries: u32,
+}
+
+impl Process {
+    fn new(id: u32) -> Process {
+        Process {
+            id,
+            child: None,
+            status: Status::Stopped,
+            retries: 0,
+        }
+    }
+}
+#[derive(Copy, Clone, PartialEq, Debug)]
 enum CommandName {
 	START,
 	STOP,
     RESTART,
     STATUS,
 }
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 enum Status {
     Starting,
     Running,
@@ -41,19 +61,44 @@ enum Status {
     Stopped,
     Restarting,
 }
+
+#[derive(Debug)]
 pub struct Message {
     cmd_input: CmdInput,
-    status_update: Option<Status>,
+    status_update: Option<StatusAndId>,
 }
-#[derive(Clone)]
+
+#[derive(Debug)]
+pub struct StatusAndId {
+    status: Status,
+    id: u32
+}
+
+#[derive(Clone, Debug)]
 pub struct CmdInput {
 	name: CommandName,
 	arg: String,
+    from_term: bool,
 }
 
-impl Process {
-    fn new(task: Task, cmd: Command) -> Process {
-        Process { child: Vec::new(), task, cmd, status: Status::Stopped }
+impl Task {
+    fn new(config: Config, cmd: Command) -> Task {
+        let mut vec: Vec<Process> = Vec::new();
+        let mut i = 0;
+        while i < config.numprocs {
+            vec.push(Process::new(i));
+            i += 1;
+        }
+        Task { processes: vec, config, cmd }
+    }
+
+    fn find_process_by_id(&mut self, id: u32) -> Option<&mut Process> {
+        for process in self.processes.iter_mut() {
+            if process.id == id {
+                return Some(process);
+            }
+        }
+        None
     }
 }
 
@@ -102,14 +147,10 @@ fn main() {
 	file.read_to_string(&mut content)
 		.expect("Could not read file...");
 		
-	// let tasks: std::collections::HashMap<String, Task> =
-	//	 serde_yaml::from_str(content.as_str()).unwrap();
-	// let result: Result<std::collections::HashMap<String, Task>, serde_yaml::Error> =
-	// 	serde_yaml::from_str(content.as_str());
-	let tasks: std::collections::BTreeMap<String, Task>;
+	let config: std::collections::BTreeMap<String, Config>;
 	match serde_yaml::from_str(content.as_str()) {
 		Ok(results) => {
-			tasks = results;
+			config = results;
 		},
 		Err(e) => {
 				print_exit!(format!("Configuration file error: {}", e), 1);
@@ -119,26 +160,26 @@ fn main() {
 	//print tasks data
 	// print_tasks(&tasks);
   
-    let mut processes: std::collections::HashMap<String, Process> = std::collections::HashMap::new();
+    let mut tasks: std::collections::HashMap<String, Task> = std::collections::HashMap::new();
     let (tx, rx): (Sender<Message>, Receiver<Message>) = mpsc::channel();
 
-    for(name, task) in tasks {
+    for(name, config) in config {
 
-        let mut vec = task.cmd.split_whitespace();
-        let stdout = File::create(task.stdout.as_str()).unwrap();
-        let stderr = File::create(task.stderr.as_str()).unwrap();
+        let mut vec = config.cmd.split_whitespace();
+        let stdout = File::create(config.stdout.as_str()).unwrap();
+        let stderr = File::create(config.stderr.as_str()).unwrap();
         let cmd_str = vec.next().expect("msg");
         let mut cmd = Command::new(cmd_str);
         cmd.stdout(stdout);
         cmd.stderr(stderr);
         cmd.args(vec);
-        cmd.current_dir(task.workingdir.as_str());
+        cmd.current_dir(config.workingdir.as_str());
 
-        let mut process = Process::new(task, cmd);
-        if process.task.autostart {
-            execute_cmd(CmdInput { name: CommandName::START, arg: String::from(&name) }, &mut process, tx.clone());
+        let mut task = Task::new(config, cmd);
+        if task.config.autostart {
+            execute_cmd(CmdInput { name: CommandName::START, arg: String::from(&name), from_term: false }, &mut task, tx.clone());
         }
-        processes.insert(name, process);
+        tasks.insert(name, task);
     }
 
     let sender = tx.clone();
@@ -147,44 +188,80 @@ fn main() {
     });
 
     loop {
-        for (_name, process) in processes.iter_mut() {
+        for (name, task) in tasks.iter_mut() {
+            // for mut process in task.processes.iter_mut() {
             let mut i = 0;
-            while i < process.child.len() {
-                match process.child[i].try_wait() {
-                    Ok(Some(status)) => {
-                        // println!("exited with: {status}");
-                        process.child.remove(i);
-                        match process.task.autorestart {
-                            Autorestart::Always => process.child.push(process.cmd.spawn().expect("iuiui")),
-                            Autorestart::Unexpected => {
-                                if !process.task.exitcodes.contains(&status.code().unwrap()) {
-                                    process.child.push(process.cmd.spawn().expect("iuiui"));
-                                }
+            while i < task.processes.len() {
+                if let Some(child) = &mut task.processes[i].child {
+                    match child.try_wait() {
+                        Ok(Some(status)) => {
+                            
+                            println!("exited with: {}", status);
+                            task.processes[i].child = None;
+                            if task.processes[i].retries >= task.config.startretries {
+                                continue;
                             }
-                            Autorestart::Never => {}
+                            let cmd = CmdInput {
+                                name: CommandName::START,
+                                arg: name.clone(),
+                                from_term: false
+                            };
+                            println!("{} restarting for the {} time", name, task.processes[i].retries + 1);
+                            match task.config.autorestart {
+                                Autorestart::Always => {
+                                    task.processes[i].retries += 1;
+                                    execute_cmd(cmd, task, tx.clone());
+                                }
+                                Autorestart::Unexpected => {
+                                    if !task.config.exitcodes.contains(&status.code().unwrap_or(0)) {
+                                        task.processes[i].retries += 1;
+                                        execute_cmd(cmd, task, tx.clone());
+                                    }
+                                }
+                                Autorestart::Never => {}
+                            }
                         }
+                        Ok(None) => {}
+                        Err(e) => println!("error attempting to wait: {}", e),
                     }
-                    Ok(None) => {}
-                    Err(e) => println!("error attempting to wait: {e}"),
                 }
                 i += 1;
             }
         }
+
         let res = rx.try_recv();
         match res {
             Ok(msg) => {
+                println!("{:?}", msg);
                 if let Some(status_update) = msg.status_update {
-                    if let Some(mut proc) = processes.get_mut(msg.cmd_input.arg.as_str()) {
-                        proc.status = status_update;
-                        // println!("{} is now {:?}", msg.cmd_input.arg, proc.status);
+                    if let Some(task) = tasks.get_mut(msg.cmd_input.arg.as_str()) {
+                        if let Some(proc) = task.find_process_by_id(status_update.id) {
+                            if (status_update.status == Status::Running && proc.status != Status::Starting) ||
+                            (status_update.status == Status::Stopped && proc.status != Status::Stopping) {
+                                continue;
+                            }
+                            if status_update.status == Status::Stopped && proc.status == Status::Stopping {
+                                proc.child = None;
+                            }
+                            println!("status received: {:?}", status_update.status);
+                            proc.status = status_update.status;
+                        }
                     }
                 }
                 else {
                     if msg.cmd_input.name == CommandName::STATUS {
-                        print_processes(&processes);
+                        print_tasks(&tasks);
                     }
-                    else if let Some(mut proc) = processes.get_mut(msg.cmd_input.arg.as_str()) {
-                        execute_cmd(msg.cmd_input, &mut proc, tx.clone());
+                    else if let Some(mut task) = tasks.get_mut(msg.cmd_input.arg.as_str()) {
+                        if msg.cmd_input.from_term {
+                            let mut i = 0;
+                            while i < task.processes.len() {
+                                task.processes[i].retries = 0;
+    
+                                i += 1;
+                            }
+                        }
+                        execute_cmd(msg.cmd_input, &mut task, tx.clone());
                     } else {
                         println!("task not found");
                     }

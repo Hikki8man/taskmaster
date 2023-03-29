@@ -13,27 +13,27 @@ pub fn read_input(sender: Sender<Message>) {
 		match input_vec[0] {
 			"start" => {
 				if input_vec.len() > 1 {
-					let cmd: CmdInput = CmdInput { name: CommandName::START, arg: String::from(input_vec[1]) };
+					let cmd: CmdInput = CmdInput { name: CommandName::START, arg: String::from(input_vec[1]), from_term: true };
 					let msg = Message { cmd_input: cmd, status_update: None };
 					sender.send(msg).expect("msg");
 				}
 			}
 			"stop" => {
 				if input_vec.len() > 1 {
-					let cmd: CmdInput = CmdInput { name: CommandName::STOP, arg: String::from(input_vec[1]) };
+					let cmd: CmdInput = CmdInput { name: CommandName::STOP, arg: String::from(input_vec[1]), from_term: true };
 					let msg = Message { cmd_input: cmd, status_update: None };
 					sender.send(msg).expect("msg");
 				}
 			}
 			"restart" => {
 				if input_vec.len() > 1 {
-					let cmd: CmdInput = CmdInput { name: CommandName::RESTART, arg: String::from(input_vec[1]) };
+					let cmd: CmdInput = CmdInput { name: CommandName::RESTART, arg: String::from(input_vec[1]), from_term: true };
 					let msg = Message { cmd_input: cmd, status_update: None };
 					sender.send(msg).expect("msg");
 				}
 			}
 			"status" => {
-				let cmd: CmdInput = CmdInput { name: CommandName::STATUS, arg: String::from(input_vec[0]) };
+				let cmd: CmdInput = CmdInput { name: CommandName::STATUS, arg: String::from(input_vec[0]), from_term: true };
 					let msg = Message { cmd_input: cmd, status_update: None };
 					sender.send(msg).expect("msg");
 			}

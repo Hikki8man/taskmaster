@@ -1,7 +1,7 @@
-use std::collections::{BTreeMap, HashMap};
+use std::{collections::{BTreeMap, HashMap}, process};
 use serde::{Serialize, Deserialize};
 
-use crate::Process;
+use crate::Task;
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "snake_case")]
@@ -48,7 +48,7 @@ pub enum Sigtype {
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(deny_unknown_fields)]
-pub struct Task {
+pub struct Config {
 	pub cmd: String,
 	pub numprocs: u32,
 	pub umask: String,
@@ -65,7 +65,7 @@ pub struct Task {
 	pub env: Option<BTreeMap<String, String>>,
 }
 
-pub fn print_tasks(tasks: &BTreeMap<String, Task>) {
+pub fn print_config(tasks: &BTreeMap<String, Config>) {
     for (name, task) in tasks {
 		println!("App: {}", name);
 		println!("\tStart Command: {}", task.cmd);
@@ -93,10 +93,13 @@ pub fn print_tasks(tasks: &BTreeMap<String, Task>) {
 	}
 }
 
-pub fn print_processes(processes: &HashMap<String, Process>) {
-    for (name, process) in processes {
+pub fn print_tasks(tasks: &HashMap<String, Task>) {
+    for (name, task) in tasks {
 		println!("----------------------------------------------------------");
-		println!("Task: {} ------ Status: {:?}", name, process.status);
+		println!("Task: {} ------", name);
+		for process in &task.processes {
+			println!("Status: {:?}", process.status);
+		}
 		println!("----------------------------------------------------------");
 	}
 }
