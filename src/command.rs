@@ -11,7 +11,6 @@ pub fn execute_cmd(mut cmd: CmdInput, task: &mut Task, sender: Sender<Message>) 
             //     return;
             // }
             for process in &mut task.processes {
-                println!("retries: {}", process.retries);
                 if process.child.is_some() || process.retries >= task.config.startretries {
                     continue;
                 }
@@ -34,7 +33,7 @@ pub fn execute_cmd(mut cmd: CmdInput, task: &mut Task, sender: Sender<Message>) 
                         // task.processes.push(child);
                     },
                     Err(err) => {
-                        println!("err: {:?}", err);
+                        // println!("err: {:?}", err);
                         process.retries += 1;
                         cmd.from_term = false;
                         sender.send(Message { cmd_input: cmd.clone(), status_update: None }).expect("msg");
@@ -73,7 +72,6 @@ pub fn execute_cmd(mut cmd: CmdInput, task: &mut Task, sender: Sender<Message>) 
                     let status_update = Some(StatusAndId { status: Status::Stopping, id });
                     let sender_clone = sender.clone();
                     sender.send(Message { cmd_input: cmd_clone.clone(), status_update }).expect("msg");
-                    // println!("gello");
 
                     let stop_time = task.config.stoptime.into();
                     thread::spawn(move || {

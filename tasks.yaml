@@ -1,5 +1,5 @@
 loop:
-  cmd: "bas test.sh"
+  cmd: "bash test.sh"
   numprocs: 2
   umask: 0022
   workingdir: "."

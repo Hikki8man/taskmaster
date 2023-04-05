@@ -4,8 +4,6 @@ mod command;
 
 use task_utils::print_tasks;
 use task_utils::Config;
-use std::clone;
-// use std::os::linux::process;
 use std::path::PathBuf;
 use std::{fs::File, process::exit};
 use std::io::{Read};
@@ -24,8 +22,6 @@ pub struct Task {
     processes: Vec<Process>,
     config: Config,
     cmd: Command,
-    // status: Status,
-    // retries: u32
 }
 
 #[derive(Debug)]
@@ -257,7 +253,6 @@ fn main() {
                             let mut i = 0;
                             while i < task.processes.len() {
                                 task.processes[i].retries = 0;
-    
                                 i += 1;
                             }
                         }
