@@ -1,7 +1,7 @@
 use std::{collections::{BTreeMap, HashMap}, process};
 use serde::{Serialize, Deserialize};
 
-use crate::Task;
+use crate::{Task, Process};
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "snake_case")]
@@ -93,13 +93,12 @@ pub fn print_config(tasks: &BTreeMap<String, Config>) {
 	}
 }
 
-pub fn print_tasks(tasks: &HashMap<String, Task>) {
-    for (name, task) in tasks {
+pub fn print_tasks(processes: &Vec<Process>) {
+	println!("Printing processes:");
+    for process in processes {
 		println!("----------------------------------------------------------");
-		println!("Task: {} ------", name);
-		for process in &task.processes {
-			println!("Status: {:?}", process.status);
-		}
+		println!("Task: {} ------", process.task_name);
+		println!("Status: {:?}", process.status);
 		println!("----------------------------------------------------------");
 	}
 }

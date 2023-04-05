@@ -1,6 +1,6 @@
 loop:
   cmd: "bash test.sh"
-  numprocs: 2
+  numprocs: 1
   umask: 0022
   workingdir: "."
   autostart: true
@@ -8,7 +8,7 @@ loop:
   exitcodes:
     - 0
   startretries: 2
-  starttime: 1
+  starttime: 4
   stopsignal: TERM
   stoptime: 2
   stdout: output.txt
