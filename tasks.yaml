@@ -1,31 +1,31 @@
-loop:
-  cmd: "bash test.sh"
-  numprocs: 1
-  umask: 0022
-  workingdir: "."
-  autostart: true
-  autorestart: always
-  exitcodes:
-    - 0
-  startretries: 2
-  starttime: 4
-  stopsignal: TERM
-  stoptime: 2
-  stdout: output.txt
-  stderr: err.txt
-
-# la_tache:
-#   cmd: "bash test1.sh"
+# loop:
+#   cmd: "bash intercept.sh"
 #   numprocs: 1
 #   umask: 0022
 #   workingdir: "."
 #   autostart: true
-#   autorestart: always
+#   autorestart: never
 #   exitcodes:
 #     - 0
-#   startretries: 3
-#   starttime: 1
+#   startretries: 2
+#   starttime: 4
 #   stopsignal: TERM
-#   stoptime: 2
-#   stdout: output2.txt
+#   stoptime: 4
+#   stdout: output.txt
 #   stderr: err.txt
+
+tache:
+  cmd: "bas test.sh"
+  numprocs: 1
+  umask: 0022
+  workingdir: "."
+  autostart: true
+  autorestart: never
+  exitcodes:
+    - 0
+  startretries: 3
+  starttime: 4
+  stopsignal: TERM
+  stoptime: 6
+  stdout: output2.txt
+  stderr: err.txt

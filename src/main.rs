@@ -65,6 +65,7 @@ impl Process {
             }
             Err(error) => {}
         }
+        self.retries += 1;
     }
 
     fn stop(&mut self, task: &mut Task) {
@@ -72,7 +73,6 @@ impl Process {
             let mut kill_cmd = Command::new("kill");
             match kill_cmd.args(["-s", "TERM", child.id().to_string().as_str()]).output() {
                 Ok(_) => {
-                    self.child = None;
                     self.timer = Instant::now();
                     self.status = Status::Stopping;
                 }
@@ -82,7 +82,21 @@ impl Process {
     }
 
     fn restart(&mut self, task: &mut Task) {
-        
+        self.stop(task);
+        self.status = Status::Restarting;
+    }
+
+    fn kill(&mut self) {
+        if let Some(child) = &mut self.child {
+            println!("KILLLL");
+            match child.kill() {
+                Ok(_) => {
+                    self.child = None;
+                    self.status = Status::Stopped;
+                }
+                Err(e) => {println!("{}", e)}
+            }
+        }
     }
 
 }
@@ -93,6 +107,7 @@ enum CommandName {
     RESTART,
     STATUS,
 }
+
 #[derive(Debug, PartialEq, Clone)]
 enum Status {
     Starting,
@@ -100,12 +115,6 @@ enum Status {
     Stopping,
     Stopped,
     Restarting,
-}
-
-#[derive(Debug)]
-pub struct StatusAndId {
-    status: Status,
-    id: u32
 }
 
 #[derive(Clone, Debug)]
@@ -135,6 +144,14 @@ impl Task {
             }
         }
     }
+
+    fn restart(&mut self, processes: &mut Vec<Process>) {
+        for process in processes {
+            if process.task_name == self.name {
+                process.restart(self);
+            }
+        }
+    }
 }
 
 macro_rules! print_exit {
@@ -144,16 +161,29 @@ macro_rules! print_exit {
 	};
 }
 
-fn update_status(process: &mut Process, task: &Task) {
+fn update_state(process: &mut Process, task: &mut Task) {
     match process.status {
         Status::Starting => {
             if process.timer.elapsed() > Duration::new(task.config.starttime as u64, 0) {
+                process.retries = 0;
                 process.status = Status::Running;
             }
         }
         Status::Stopping => {
             if process.timer.elapsed() > Duration::new(task.config.stoptime as u64, 0) {
+                if let Some(_child) = &process.child {
+                    process.kill();
+                }
                 process.status = Status::Stopped;
+            }
+        }
+        Status::Restarting => {
+            if process.timer.elapsed() > Duration::new(task.config.stoptime as u64, 0) {
+                println!("restart::stop finished");
+                if let Some(_child) = &process.child {
+                    process.kill();
+                }
+                process.start(task);
             }
         }
         _ => {}
@@ -230,7 +260,7 @@ fn main() {
 
         let mut task = Task::new(config, cmd, name.clone());
         
-        for i in 0..task.config.numprocs {
+        for _i in 0..task.config.numprocs {
             id += 1;
             let mut process = Process::new(id, name.clone());
             if task.config.autostart {
@@ -245,36 +275,40 @@ fn main() {
     let _th = thread::spawn(move || {
         read_input(sender);
     });
-
+    // Does it retry if autorestart off??
     loop {
         for process in processes.iter_mut() {
             let task = tasks.get_mut(process.task_name.as_str()).expect("lol");//Todo unwrapor and kill processes
-            update_status(process, task);
             
             if let Some(child) = &mut process.child {
                 match child.try_wait() {
                     Ok(Some(status)) => {
+                        println!("exit status: {}, Process status: {:?}", status, process.status);
                         process.child = None;
-                        process.status = Status::Stopped;
                         if process.retries >= task.config.startretries {
                             continue;
                         }
-                        match task.config.autorestart {
-                            Autorestart::Always => {
-                                process.start(task);
-                            }
-                            Autorestart::Unexpected => {
-                                if !task.config.exitcodes.contains(&status.code().unwrap_or(0)) {
+                        if process.status != Status::Stopping && process.status != Status::Restarting {
+                            match task.config.autorestart {
+                                Autorestart::Always => {
                                     process.start(task);
                                 }
+                                Autorestart::Unexpected => {
+                                    if !task.config.exitcodes.contains(&status.code().unwrap_or(0)) {
+                                        process.start(task);
+                                    }
+                                }
+                                Autorestart::Never => { process.status = Status::Stopped }
                             }
-                            Autorestart::Never => {}
+                        } else if process.status != Status::Restarting {
+                            process.status = Status::Stopped;
                         }
                     }
                     Ok(None) => {}
                     Err(e) => println!("error attempting to wait: {}", e),
                 }
             }
+            update_state(process, task);
         }
         match rx.try_recv() {
             Ok(msg) => {
@@ -283,15 +317,23 @@ fn main() {
                     CommandName::START => {
                         if let Some(task) = task {
                             task.start(&mut processes);
+                        } else {
+                            println!("Task not found");
                         }
                     }
                     CommandName::STOP => {
                         if let Some(task) = task {
                             task.stop(&mut processes);
+                        } else {
+                            println!("Task not found");
                         }
                     }
                     CommandName::RESTART => {
-
+                        if let Some(task) = task {
+                            task.restart(&mut processes);
+                        } else {
+                            println!("Task not found");
+                        }
                     }
                     CommandName::STATUS => {
                         print_tasks(&processes);

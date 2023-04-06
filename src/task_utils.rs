@@ -98,6 +98,9 @@ pub fn print_tasks(processes: &Vec<Process>) {
     for process in processes {
 		println!("----------------------------------------------------------");
 		println!("Task: {} ------", process.task_name);
+		if let Some(child) = &process.child {
+			println!("Pid: {:?}", child.id());
+		}
 		println!("Status: {:?}", process.status);
 		println!("----------------------------------------------------------");
 	}
