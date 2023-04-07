@@ -1,5 +1,13 @@
-use std::{io::{self, Write}, sync::mpsc::Sender, process::exit};
-use crate::{TermInput, CommandName};
+use std::{io::{self}, sync::mpsc::Sender, process::exit};
+
+use crate::monitor::CommandName;
+
+#[derive(Clone, Debug)]
+pub struct TermInput {
+	pub name: CommandName,
+	pub arg: String,
+}
+
 
 fn task_missing(cmd_name: &str) {
 	println!("Command is missing task name. Here is an example of a command:");

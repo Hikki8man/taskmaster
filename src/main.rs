@@ -1,190 +1,31 @@
 mod task_utils;
 mod terminal;
-mod command;
+mod process;
+mod task;
+mod monitor;
 
+use process::Process;
+use task::Task;
 use task_utils::print_tasks;
 use task_utils::Config;
-use task_utils::sigtype_to_string;
-// use std::os::linux::process;
 use std::path::PathBuf;
-use std::process;
-use std::time::Duration;
-use std::time::Instant;
 use std::{fs::File, process::exit};
 use std::io::{Read};
 use std::{env};
 use std::thread;
 use std::sync::mpsc::{Sender, Receiver};
 use std::sync::mpsc;
-use std::process::{Command, Child};
+use std::process::{Command};
 
-use crate::task_utils::Autorestart;
-// use crate::command::execute_cmd;
+use crate::monitor::Monitor;
+use crate::terminal::TermInput;
 use crate::terminal::read_input;
-
-#[derive(Debug)]
-pub struct Task {
-    // processes: Vec<Process>,
-    name: String,
-    config: Config,
-    cmd: Command,
-}
-
-#[derive(Debug)]
-pub struct Process {
-    id: u32,
-    task_name: String,
-    child: Option<Child>,
-    status: Status,
-    retries: u32,
-    timer: Instant,
-}
-
-impl Process {
-    fn new(id: u32, task_name: String) -> Process {
-        Process {
-            id,
-            task_name,
-            child: None,
-            status: Status::Stopped,
-            retries: 0,
-            timer: Instant::now(),
-        }
-    }
-
-    fn start(&mut self, task: &mut Task) {
-        if let Some(_child) = &self.child {
-            return println!("Process {} is already running", self.id);
-        }
-        match task.cmd.spawn() {
-            Ok(child) => {
-                self.status = Status::Starting;
-                self.timer = Instant::now();
-                self.child = Some(child);
-            }
-            Err(error) => {}// add option err in process to display in status ?
-        }
-        self.retries += 1;
-    }
-
-    fn stop(&mut self, task: &mut Task) {
-        if let Some(child) = &self.child {
-            let mut kill_cmd = Command::new("kill");
-            match kill_cmd.args(["-s", sigtype_to_string(&task.config.stopsignal), child.id().to_string().as_str()]).output() {
-                Ok(_) => {
-                    self.timer = Instant::now();
-                    self.status = Status::Stopping;
-                }
-                Err(e) => {println!("{}", e)}
-            }
-        }
-    }
-
-    fn restart(&mut self, task: &mut Task) {
-        self.stop(task);
-        self.status = Status::Restarting;
-    }
-
-    fn kill(&mut self) {
-        if let Some(child) = &mut self.child {
-            println!("KILLLL");
-            match child.kill() {
-                Ok(_) => {
-                    self.child = None;
-                    self.status = Status::Stopped;
-                }
-                Err(e) => {println!("{}", e)}
-            }
-        }
-    }
-
-}
-#[derive(Copy, Clone, PartialEq, Debug)]
-enum CommandName {
-	START,
-	STOP,
-    RESTART,
-    STATUS,
-}
-
-#[derive(Debug, PartialEq, Clone)]
-enum Status {
-    Starting,
-    Running,
-    Stopping,
-    Stopped,
-    Restarting,
-    Fatal,
-}
-
-#[derive(Clone, Debug)]
-pub struct TermInput {
-	name: CommandName,
-	arg: String,
-}
-
-impl Task {
-    fn new(config: Config, cmd: Command, name: String) -> Task {
-        Task { config, cmd, name }
-    }
-
-    fn start(&mut self, processes: &mut Vec<Process>) {
-        for process in processes {
-            if process.task_name == self.name {
-                process.retries = 0;
-                process.start(self);
-            }
-        }
-    }
-
-    fn stop(&mut self, processes: &mut Vec<Process>) {
-        for process in processes {
-            if process.task_name == self.name {
-                process.stop(self);
-            }
-        }
-    }
-
-    fn restart(&mut self, processes: &mut Vec<Process>) {
-        for process in processes {
-            if process.task_name == self.name {
-                process.retries = 0;
-                process.restart(self);
-            }
-        }
-    }
-}
 
 macro_rules! print_exit {
 	($err_msg:expr, $err_code:expr) => {
 		println!("{}", $err_msg);
 		exit($err_code);
 	};
-}
-
-fn check_state(process: &mut Process, task: &mut Task) {
-    match process.status {
-        Status::Starting => {
-            if process.timer.elapsed() > Duration::new(task.config.starttime as u64, 0) {
-                process.retries = 0;
-                process.status = Status::Running;
-                println!("{}:{} is now running", process.task_name, process.id);
-            }
-        }
-        Status::Stopping => {
-            if process.timer.elapsed() > Duration::new(task.config.stoptime as u64, 0) {
-                process.kill();
-                println!("{}:{} is now stopped", process.task_name, process.id);
-            }
-        }
-        Status::Restarting => {
-            if process.timer.elapsed() > Duration::new(task.config.stoptime as u64, 0) {
-                process.kill();
-                process.start(task);
-            }
-        }
-        _ => {}
-    }
 }
 
 fn main() {
@@ -234,9 +75,6 @@ fn main() {
 				print_exit!(format!("Configuration file error: {}", e), 1);
 		}
 	}
-
-	//print tasks data
-	// print_tasks(&tasks);
   
     let mut tasks: std::collections::HashMap<String, Task> = std::collections::HashMap::new();
     let mut processes: Vec<Process> = vec![];
@@ -273,87 +111,6 @@ fn main() {
         read_input(sender);
     });
     print_tasks(&processes);
-    loop {
-        for process in processes.iter_mut() {
-            let task = tasks.get_mut(process.task_name.as_str()).expect("lol");//Todo unwrapor and kill processes
-            
-            if let Some(child) = &mut process.child {
-                match child.try_wait() {
-                    Ok(Some(status)) => {
-                        println!("exit status: {}, Process status: {:?}", status, process.status);
-                        process.child = None;
-                        match process.status {
-                            Status::Starting => {
-                                if process.retries < task.config.startretries {
-                                    process.start(task);
-                                } else {
-                                    process.status = Status::Fatal;
-                                }
-                            }
-                            Status::Stopping => {
-                                process.status = Status::Stopped;
-                            }
-
-                            Status::Restarting => {
-                                process.start(task);
-                            }
-
-                            _ => {
-                                match task.config.autorestart {
-                                    Autorestart::Always => {
-                                        process.start(task);
-                                    }
-                                    Autorestart::Unexpected => {
-                                        if !task.config.exitcodes.contains(&status.code().unwrap_or(0)) {
-                                            process.start(task);
-                                        } else {
-                                            process.status = Status::Stopped;
-                                        }
-                                    }
-                                    Autorestart::Never => { process.status = Status::Stopped }
-                                }
-                            }
-
-                        }
-                    }
-                    Ok(None) => {
-                        check_state(process, task);
-                    }
-                    Err(e) => println!("error attempting to wait: {}", e),
-                }
-            }
-        }
-        match rx.try_recv() {
-            Ok(msg) => {
-                let task = tasks.get_mut(&msg.arg);
-                match msg.name {
-                    CommandName::START => {
-                        if let Some(task) = task {
-                            task.start(&mut processes);
-                        } else {
-                            println!("Task not found");
-                        }
-                    }
-                    CommandName::STOP => {
-                        if let Some(task) = task {
-                            task.stop(&mut processes);
-                        } else {
-                            println!("Task not found");
-                        }
-                    }
-                    CommandName::RESTART => {
-                        if let Some(task) = task {
-                            task.restart(&mut processes);
-                        } else {
-                            println!("Task not found");
-                        }
-                    }
-                    CommandName::STATUS => {
-                        print_tasks(&processes);
-                    }
-                }
-            }
-            Err(_) => {},
-        }
-    }
+    let mut monitor = Monitor::new(processes, tasks, rx);
+    monitor.task_manager_loop();
 }
