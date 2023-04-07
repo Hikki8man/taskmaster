@@ -19,7 +19,7 @@ pub fn read_input(sender: Sender<TermInput>) {
 		match input_vec[0] {
 			"start" => {
 				if input_vec.len() > 1 {
-					let msg: TermInput = TermInput { name: CommandName::START, arg: String::from(input_vec[1]), from_term: true };
+					let msg: TermInput = TermInput { name: CommandName::START, arg: String::from(input_vec[1]) };
 					sender.send(msg).expect("msg");
 				} else {
 					task_missing(input_vec[0])
@@ -27,7 +27,7 @@ pub fn read_input(sender: Sender<TermInput>) {
 			}
 			"stop" => {
 				if input_vec.len() > 1 {
-					let msg: TermInput = TermInput { name: CommandName::STOP, arg: String::from(input_vec[1]), from_term: true };
+					let msg: TermInput = TermInput { name: CommandName::STOP, arg: String::from(input_vec[1]) };
 					sender.send(msg).expect("msg");
 				} else {
 					task_missing(input_vec[0])
@@ -35,14 +35,14 @@ pub fn read_input(sender: Sender<TermInput>) {
 			}
 			"restart" => {
 				if input_vec.len() > 1 {
-					let msg: TermInput = TermInput { name: CommandName::RESTART, arg: String::from(input_vec[1]), from_term: true };
+					let msg: TermInput = TermInput { name: CommandName::RESTART, arg: String::from(input_vec[1]) };
 					sender.send(msg).expect("msg");
 				} else {
 					task_missing(input_vec[0])
 				}
 			}
 			"status" => {
-				let msg: TermInput = TermInput { name: CommandName::STATUS, arg: String::from(""), from_term: true };
+				let msg: TermInput = TermInput { name: CommandName::STATUS, arg: String::from("") };
 				sender.send(msg).expect("msg");
 			}
 			"help" => {

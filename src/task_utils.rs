@@ -46,6 +46,42 @@ pub enum Sigtype {
 	USR2,
 }
 
+pub fn sigtype_to_string(sigtype: &Sigtype) -> &'static str {
+    match sigtype {
+        Sigtype::HUP => "HUP",
+        Sigtype::INT => "INT",
+        Sigtype::QUIT => "QUIT",
+        Sigtype::ILL => "ILL",
+        Sigtype::TRAP => "TRAP",
+        Sigtype::ABRT => "ABRT",
+        Sigtype::EMT => "EMT",
+        Sigtype::FPE => "FPE",
+        Sigtype::KILL => "KILL",
+        Sigtype::BUS => "BUS",
+        Sigtype::SEGV => "SEGV",
+        Sigtype::SYS => "SYS",
+        Sigtype::PIPE => "PIPE",
+        Sigtype::ALRM => "ALRM",
+        Sigtype::TERM => "TERM",
+        Sigtype::URG => "URG",
+        Sigtype::STOP => "STOP",
+        Sigtype::TSTP => "TSTP",
+        Sigtype::CONT => "CONT",
+        Sigtype::CHLD => "CHLD",
+        Sigtype::TTIN => "TTIN",
+        Sigtype::TTOU => "TTOU",
+        Sigtype::IO => "IO",
+        Sigtype::XCPU => "XCPU",
+        Sigtype::XFSZ => "XFSZ",
+        Sigtype::VTALRM => "VTALRM",
+        Sigtype::PROF => "PROF",
+        Sigtype::WINCH => "WINCH",
+        Sigtype::INFO => "INFO",
+        Sigtype::USR1 => "USR1",
+        Sigtype::USR2 => "USR2",
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(deny_unknown_fields)]
 pub struct Config {

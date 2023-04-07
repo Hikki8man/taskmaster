@@ -4,6 +4,7 @@ mod command;
 
 use task_utils::print_tasks;
 use task_utils::Config;
+use task_utils::sigtype_to_string;
 // use std::os::linux::process;
 use std::path::PathBuf;
 use std::process;
@@ -61,7 +62,7 @@ impl Process {
                 self.timer = Instant::now();
                 self.child = Some(child);
             }
-            Err(error) => {}
+            Err(error) => {}// add option err in process to display in status ?
         }
         self.retries += 1;
     }
@@ -69,7 +70,7 @@ impl Process {
     fn stop(&mut self, task: &mut Task) {
         if let Some(child) = &self.child {
             let mut kill_cmd = Command::new("kill");
-            match kill_cmd.args(["-s", "TERM", child.id().to_string().as_str()]).output() {
+            match kill_cmd.args(["-s", sigtype_to_string(&task.config.stopsignal), child.id().to_string().as_str()]).output() {
                 Ok(_) => {
                     self.timer = Instant::now();
                     self.status = Status::Stopping;
@@ -107,26 +108,19 @@ enum CommandName {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-enum Restart {
-    Starting,
-    Stopping
-}
-
-#[derive(Debug, PartialEq, Clone)]
 enum Status {
     Starting,
     Running,
     Stopping,
     Stopped,
-    Restarting
-    // Restarting(Restart),
+    Restarting,
+    Fatal,
 }
 
 #[derive(Clone, Debug)]
 pub struct TermInput {
 	name: CommandName,
 	arg: String,
-    from_term: bool,
 }
 
 impl Task {
@@ -137,6 +131,7 @@ impl Task {
     fn start(&mut self, processes: &mut Vec<Process>) {
         for process in processes {
             if process.task_name == self.name {
+                process.retries = 0;
                 process.start(self);
             }
         }
@@ -153,6 +148,7 @@ impl Task {
     fn restart(&mut self, processes: &mut Vec<Process>) {
         for process in processes {
             if process.task_name == self.name {
+                process.retries = 0;
                 process.restart(self);
             }
         }
@@ -166,7 +162,7 @@ macro_rules! print_exit {
 	};
 }
 
-fn update_state(process: &mut Process, task: &mut Task) {
+fn check_state(process: &mut Process, task: &mut Task) {
     match process.status {
         Status::Starting => {
             if process.timer.elapsed() > Duration::new(task.config.starttime as u64, 0) {
@@ -181,9 +177,8 @@ fn update_state(process: &mut Process, task: &mut Task) {
                 println!("{}:{} is now stopped", process.task_name, process.id);
             }
         }
-        Status::Restarting => { //TODO NOT GOOD
+        Status::Restarting => {
             if process.timer.elapsed() > Duration::new(task.config.stoptime as u64, 0) {
-                println!("restart::stop finished");
                 process.kill();
                 process.start(task);
             }
@@ -292,7 +287,7 @@ fn main() {
                                 if process.retries < task.config.startretries {
                                     process.start(task);
                                 } else {
-                                    process.status = Status::Stopped;
+                                    process.status = Status::Fatal;
                                 }
                             }
                             Status::Stopping => {
@@ -311,6 +306,8 @@ fn main() {
                                     Autorestart::Unexpected => {
                                         if !task.config.exitcodes.contains(&status.code().unwrap_or(0)) {
                                             process.start(task);
+                                        } else {
+                                            process.status = Status::Stopped;
                                         }
                                     }
                                     Autorestart::Never => { process.status = Status::Stopped }
@@ -320,7 +317,7 @@ fn main() {
                         }
                     }
                     Ok(None) => {
-                        update_state(process, task);
+                        check_state(process, task);
                     }
                     Err(e) => println!("error attempting to wait: {}", e),
                 }
