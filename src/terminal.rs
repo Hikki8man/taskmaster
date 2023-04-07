@@ -9,8 +9,8 @@ fn task_missing(cmd_name: &str) {
 pub fn read_input(sender: Sender<TermInput>) {
 	loop {
 		let mut buffer = String::new();
-		print!("> ");
-        io::stdout().flush().unwrap();
+		// print!("> ");
+        // io::stdout().flush().unwrap();
 		io::stdin().read_line(&mut buffer).expect("msg");
 		let input_vec: Vec<&str> = buffer.split_whitespace().collect();
 		if input_vec.is_empty() {

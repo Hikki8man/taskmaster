@@ -37,7 +37,6 @@ pub struct Process {
     status: Status,
     retries: u32,
     timer: Instant,
-    restarting: bool,
 }
 
 impl Process {
@@ -49,7 +48,6 @@ impl Process {
             status: Status::Stopped,
             retries: 0,
             timer: Instant::now(),
-            restarting: false,
         }
     }
 
@@ -109,12 +107,19 @@ enum CommandName {
 }
 
 #[derive(Debug, PartialEq, Clone)]
+enum Restart {
+    Starting,
+    Stopping
+}
+
+#[derive(Debug, PartialEq, Clone)]
 enum Status {
     Starting,
     Running,
     Stopping,
     Stopped,
-    Restarting,
+    Restarting
+    // Restarting(Restart),
 }
 
 #[derive(Clone, Debug)]
@@ -167,22 +172,19 @@ fn update_state(process: &mut Process, task: &mut Task) {
             if process.timer.elapsed() > Duration::new(task.config.starttime as u64, 0) {
                 process.retries = 0;
                 process.status = Status::Running;
+                println!("{}:{} is now running", process.task_name, process.id);
             }
         }
         Status::Stopping => {
             if process.timer.elapsed() > Duration::new(task.config.stoptime as u64, 0) {
-                if let Some(_child) = &process.child {
-                    process.kill();
-                }
-                process.status = Status::Stopped;
+                process.kill();
+                println!("{}:{} is now stopped", process.task_name, process.id);
             }
         }
-        Status::Restarting => {
+        Status::Restarting => { //TODO NOT GOOD
             if process.timer.elapsed() > Duration::new(task.config.stoptime as u64, 0) {
                 println!("restart::stop finished");
-                if let Some(_child) = &process.child {
-                    process.kill();
-                }
+                process.kill();
                 process.start(task);
             }
         }
@@ -275,7 +277,7 @@ fn main() {
     let _th = thread::spawn(move || {
         read_input(sender);
     });
-    // Does it retry if autorestart off??
+    print_tasks(&processes);
     loop {
         for process in processes.iter_mut() {
             let task = tasks.get_mut(process.task_name.as_str()).expect("lol");//Todo unwrapor and kill processes
@@ -285,30 +287,44 @@ fn main() {
                     Ok(Some(status)) => {
                         println!("exit status: {}, Process status: {:?}", status, process.status);
                         process.child = None;
-                        if process.retries >= task.config.startretries {
-                            continue;
-                        }
-                        if process.status != Status::Stopping && process.status != Status::Restarting {
-                            match task.config.autorestart {
-                                Autorestart::Always => {
+                        match process.status {
+                            Status::Starting => {
+                                if process.retries < task.config.startretries {
                                     process.start(task);
+                                } else {
+                                    process.status = Status::Stopped;
                                 }
-                                Autorestart::Unexpected => {
-                                    if !task.config.exitcodes.contains(&status.code().unwrap_or(0)) {
+                            }
+                            Status::Stopping => {
+                                process.status = Status::Stopped;
+                            }
+
+                            Status::Restarting => {
+                                process.start(task);
+                            }
+
+                            _ => {
+                                match task.config.autorestart {
+                                    Autorestart::Always => {
                                         process.start(task);
                                     }
+                                    Autorestart::Unexpected => {
+                                        if !task.config.exitcodes.contains(&status.code().unwrap_or(0)) {
+                                            process.start(task);
+                                        }
+                                    }
+                                    Autorestart::Never => { process.status = Status::Stopped }
                                 }
-                                Autorestart::Never => { process.status = Status::Stopped }
                             }
-                        } else if process.status != Status::Restarting {
-                            process.status = Status::Stopped;
+
                         }
                     }
-                    Ok(None) => {}
+                    Ok(None) => {
+                        update_state(process, task);
+                    }
                     Err(e) => println!("error attempting to wait: {}", e),
                 }
             }
-            update_state(process, task);
         }
         match rx.try_recv() {
             Ok(msg) => {

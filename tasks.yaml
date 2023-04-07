@@ -9,13 +9,13 @@
 #     - 0
 #   startretries: 2
 #   starttime: 4
-#   stopsignal: TERM
-#   stoptime: 4
+#   stopsignal: INT
+#   stoptime: 10
 #   stdout: output.txt
 #   stderr: err.txt
 
 tache:
-  cmd: "bas test.sh"
+  cmd: "bash test.sh"
   numprocs: 1
   umask: 0022
   workingdir: "."
@@ -24,8 +24,8 @@ tache:
   exitcodes:
     - 0
   startretries: 3
-  starttime: 4
+  starttime: 2
   stopsignal: TERM
-  stoptime: 6
-  stdout: output2.txt
+  stoptime: 10
+  stdout: output1.txt
   stderr: err.txt
