@@ -76,7 +76,7 @@ fn check_input(input: String, sender: &Sender<TermInput>) {
 
 use std::os::unix::io::AsRawFd;
 use std::mem;
-use libc::{self, c_int, tcgetattr, tcsetattr, TCSANOW, STDIN_FILENO, termios, ECHO, ICANON, ISIG, VMIN, VTIME, VINTR, VEOF};
+use libc::{self, c_int, tcgetattr, tcsetattr, TCSANOW, STDIN_FILENO, termios, ECHO, ICANON, ISIG, VMIN, VTIME, VINTR, VEOF, INPCK, ISTRIP, IXON};
 
 fn clear_line() {
 	print!("\r\x1B[2K");
@@ -96,8 +96,8 @@ pub fn read_input(sender: Sender<TermInput>) {
     }
 
     let mut new_termios = orig_termios;
-    new_termios.c_lflag &= !(libc::ICANON  | libc::ECHO /* | libc::ISIG */);
-    new_termios.c_iflag &= !(libc::BRKINT | libc::INPCK | libc::ISTRIP | libc::IXON);
+    new_termios.c_lflag &= !(libc::ICANON  | ECHO);
+    new_termios.c_iflag &= !(libc::BRKINT | INPCK | ISTRIP | IXON);
     new_termios.c_cflag |= libc::CS8;
 
     if unsafe { tcsetattr(stdin, TCSANOW, &new_termios as *const _) } != 0 {
@@ -109,33 +109,54 @@ pub fn read_input(sender: Sender<TermInput>) {
 	let mut buf = [0; 1];
 	let mut cursor_pos = 0;
 	let mut index_history = 0;
+	let mut tab_index = 0;
+	let mut suggest_word:  Option<String> = None;
 	loop {
     	let n = io::stdin().read(&mut buf).unwrap();
     	if n == 1 {
         	let c = buf[0] as char;
+			if c != TAB {
+				tab_index = 0;
+				suggest_word = None;
+			} else if c != ARROW {
+				saved_word = None;
+			}
         	match c {
             	TAB => {
-					saved_word = None;
         			// Tab key pressed, complete the current word
-        			let completions = get_completions(&word);
-        			if completions.len() == 1 {
-        			    // Only one completion, replace the current word with it
-        			    word = completions[0].clone();
+					if suggest_word.is_none() {
+						suggest_word = Some(word.clone());
+					}
+					let suggestion = suggest_word.as_ref().map(|s| s.as_str()).unwrap_or(word.as_str());
+					let completions = get_completions(&suggestion);
+					if completions.len() == 1 {
+						// Only one completion, replace the current word with it
+						word = completions[0].clone();
 						clear_line_and_print(&word);
 						cursor_pos = word.len();
-        			} else if completions.len() > 1 {
-						clear_line();
-        			    // Multiple completions, print them and let the user choose one
-        			    println!("Possible completions:");
-        			    for completion in completions {
-        			        print!("{}		", completion);
-        			    }
-						print!("\n");
-						print!("{}", word);
-        			}
+					} else if completions.len() > 1 {
+						if tab_index == 0 {
+							clear_line();
+							// Multiple completions, print them and let the user choose one
+							println!("Possible completions:");
+							for completion in completions {
+								print!("{}		", completion);
+							}
+							print!("\n");
+							print!("{}", word);
+						} else {
+							if tab_index >= completions.len() {
+								tab_index = 0;
+							}
+							let suggestion = completions.get(tab_index).unwrap();
+							clear_line_and_print(suggestion);
+							word = suggestion.clone();
+							cursor_pos = word.len();
+						}
+						tab_index += 1;
+					}
            		}
        			ENTER => {
-					saved_word = None;
 					clear_line();
 					io::stdout().flush().unwrap();
 					cursor_pos = 0;
@@ -146,7 +167,6 @@ pub fn read_input(sender: Sender<TermInput>) {
        			    word.clear();
        			}
 				BACKSPACE => {
-					saved_word = None;
 					index_history = history.len();
 					if cursor_pos > 0 {
 						cursor_pos -= 1;
@@ -221,7 +241,6 @@ pub fn read_input(sender: Sender<TermInput>) {
 				}
        			_ => {
        			  	// Other key pressed, add it to the current word
-					saved_word = None;
 					word.insert(cursor_pos, c);
 					cursor_pos += 1;
 					clear_line_and_print(&word);
