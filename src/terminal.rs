@@ -2,16 +2,24 @@ use std::{io::{self, Read, stdout, Write}, sync::mpsc::Sender, process::exit, ff
 
 use crate::monitor::CommandName;
 
+const ENTER: char = '\n';
+const BACKSPACE: char = '\x7f';
+const TAB: char = '\t';
+const ARROW: char = '\x1B';
+const LEFT: &'static str = "[D";
+const RIGHT: &'static str = "[C";
+const UP: &'static str = "[A";
+const DOWN: &'static str = "[B";
+
 #[derive(Clone, Debug)]
 pub struct TermInput {
 	pub name: CommandName,
 	pub arg: String,
 }
 
-
 fn task_missing(cmd_name: &str) {
 	println!("Command is missing task name. Here is an example of a command:");
-	println!("{} [name of the task]\n", cmd_name);
+	println!("{} [name of the task]", cmd_name);
 }
 
 fn check_input(input: String, sender: &Sender<TermInput>) {
@@ -51,7 +59,7 @@ fn check_input(input: String, sender: &Sender<TermInput>) {
 		"help" => {
 			println!("Here are the command you can use:");
 			println!("===================================");
-			println!("start		stop 	restart 	status\n");
+			println!("start    stop    restart    status");
 		}
 		"shutdown" => {
 			//TODO stop all process
@@ -59,7 +67,7 @@ fn check_input(input: String, sender: &Sender<TermInput>) {
 		}
 		_ => {
 			println!("Command not found");
-			println!("Type 'help' to see commands available\n");
+			println!("Type 'help' to see commands available");
 		}
 	}
 }
@@ -70,6 +78,13 @@ use std::os::unix::io::AsRawFd;
 use std::mem;
 use libc::{self, c_int, tcgetattr, tcsetattr, TCSANOW, STDIN_FILENO, termios, ECHO, ICANON, ISIG, VMIN, VTIME, VINTR, VEOF};
 
+fn clear_line() {
+	print!("\r\x1B[2K");
+}
+
+fn clear_line_and_print(str: &String) {
+	print!("\r\x1B[2K{}", str);
+}
 
 pub fn read_input(sender: Sender<TermInput>) {
     let stdin = io::stdin().as_raw_fd();
@@ -94,26 +109,22 @@ pub fn read_input(sender: Sender<TermInput>) {
 	let mut buf = [0; 1];
 	let mut cursor_pos = 0;
 	let mut index_history = 0;
-
 	loop {
     	let n = io::stdin().read(&mut buf).unwrap();
     	if n == 1 {
         	let c = buf[0] as char;
         	match c {
-            	'\t' => {
+            	TAB => {
 					saved_word = None;
-					io::stdout().flush().unwrap();
         			// Tab key pressed, complete the current word
         			let completions = get_completions(&word);
         			if completions.len() == 1 {
         			    // Only one completion, replace the current word with it
         			    word = completions[0].clone();
-						print!("\r\x1B[2K"); // Move the cursor to the beginning of the line and clear to the end of the line
-   					 	io::stdout().flush().unwrap();
-        			    print!("{}", word);
+						clear_line_and_print(&word);
 						cursor_pos = word.len();
         			} else if completions.len() > 1 {
-						print!("\r\x1B[2K");
+						clear_line();
         			    // Multiple completions, print them and let the user choose one
         			    println!("Possible completions:");
         			    for completion in completions {
@@ -123,9 +134,9 @@ pub fn read_input(sender: Sender<TermInput>) {
 						print!("{}", word);
         			}
            		}
-       			'\n' => {
+       			ENTER => {
 					saved_word = None;
-					print!("\r\x1B[2K");
+					clear_line();
 					io::stdout().flush().unwrap();
 					cursor_pos = 0;
 					println!("{}", word);
@@ -134,15 +145,13 @@ pub fn read_input(sender: Sender<TermInput>) {
 					check_input(word.clone(), &sender);
        			    word.clear();
        			}
-       			'\r' => {}
-				'\x7f' => {
+				BACKSPACE => {
 					saved_word = None;
 					index_history = history.len();
 					if cursor_pos > 0 {
 						cursor_pos -= 1;
 						word.remove(cursor_pos);
-						// Erase the entire line and reprint the modified word
-						print!("\r\x1B[2K{}", word);
+						clear_line_and_print(&word);
 						// Move the cursor back to the correct position
 						if cursor_pos != word.len() {
 							print!("\x1b[{}D", word.len() - cursor_pos);
@@ -150,14 +159,13 @@ pub fn read_input(sender: Sender<TermInput>) {
 						io::stdout().flush().unwrap();
 					}
 				}
-				'\x1B' => {
+				ARROW => {
 					let mut buf = [0; 2];
 					let n = io::stdin().read(&mut buf).unwrap();
     				if n == 2 {
 						let arrow = String::from_utf8(buf.to_vec()).unwrap();
 						match arrow.as_str() {
-							"[D" => {
-								//left
+							LEFT => {
 								saved_word = None;
 								index_history = history.len();
 								if cursor_pos > 0 {
@@ -166,8 +174,7 @@ pub fn read_input(sender: Sender<TermInput>) {
 									io::stdout().flush().unwrap();
 								}
 							}
-							"[C" => {
-								//right
+							RIGHT => {
 								saved_word = None;
 								index_history = history.len();
 								if cursor_pos < word.len() {
@@ -176,12 +183,10 @@ pub fn read_input(sender: Sender<TermInput>) {
 									io::stdout().flush().unwrap();
 								}
 							}
-							"[A" => { // TODO save current word
-								//up
-								// println!("index: {}", index_history);
+							UP => {
 								if !history.is_empty() && index_history != 0 {
 									let histo_at = history.get(index_history - 1).unwrap();
-									print!("\r\x1B[2K{}", histo_at);
+									clear_line_and_print(&histo_at);
 									if saved_word == None {
 										saved_word = Some(word.clone());
 									}
@@ -192,17 +197,16 @@ pub fn read_input(sender: Sender<TermInput>) {
 								}
 
 							}
-							"[B" => {
-								//down
+							DOWN => {
 								if !history.is_empty() {
 									if index_history + 1 < history.len() {
 										index_history += 1;
 										let histo_at = history.get(index_history).unwrap();
-										print!("\r\x1B[2K{}", histo_at);
+										clear_line_and_print(&histo_at);
 										word = histo_at.clone();
 										cursor_pos = word.len();
 									} else if let Some(saved) = saved_word{
-										print!("\r\x1B[2K{}", saved);
+										clear_line_and_print(&saved);
 										word = saved;
 										saved_word = None;
 										cursor_pos = word.len();
@@ -220,9 +224,7 @@ pub fn read_input(sender: Sender<TermInput>) {
 					saved_word = None;
 					word.insert(cursor_pos, c);
 					cursor_pos += 1;
-					print!("\r\x1B[2K");
-					print!("{}", word);
-					print!("\r\x1B[{}C", cursor_pos);
+					clear_line_and_print(&word);
        			}
        		}
 			   io::stdout().flush().unwrap();

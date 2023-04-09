@@ -1,6 +1,6 @@
 loop:
-  cmd: "bash intercep.sh"
-  numprocs: 1
+  cmd: "bash interceptor.sh"
+  numprocs: 3
   umask: 0022
   workingdir: "."
   autostart: true
