@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::mpsc::Receiver, time::Duration};
+use std::{collections::HashMap, sync::mpsc::Receiver, time::Duration, process::ExitStatus, os::unix::process::ExitStatusExt};
 
 use crate::{process::{Process, Status}, task::Task, task_utils::{Autorestart, print_tasks}, terminal::TermInput};
 
@@ -45,7 +45,6 @@ impl Monitor {
 			_ => {}
 		}
 	}
-
 	pub fn task_manager_loop(&mut self) {
 		loop {
 			for process in self.processes.iter_mut() {
@@ -54,7 +53,7 @@ impl Monitor {
 				if let Some(child) = &mut process.child {
 					match child.try_wait() {
 						Ok(Some(status)) => {
-							println!("exit status: {}, Process status: {:?}", status, process.status);
+							println!("exit status: {:?}, Process status: {:?}", status.code(), process.status);
 							process.child = None;
 							match process.status {
 								Status::Starting => {

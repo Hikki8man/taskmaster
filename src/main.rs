@@ -72,13 +72,13 @@ fn main() {
 			config = results;
 		},
 		Err(e) => {
-				print_exit!(format!("Configuration file error: {}", e), 1);
+			print_exit!(format!("Configuration file error: {}", e), 1);
 		}
 	}
   
     let mut tasks: std::collections::HashMap<String, Task> = std::collections::HashMap::new();
     let mut processes: Vec<Process> = vec![];
-    let (tx, rx): (Sender<TermInput>, Receiver<TermInput>) = mpsc::channel();
+    let (sender, receiver): (Sender<TermInput>, Receiver<TermInput>) = mpsc::channel();
 
     let mut id = 0;
     for(name, config) in config {
@@ -106,11 +106,10 @@ fn main() {
         tasks.insert(name, task);
     }
 
-    let sender = tx.clone();
     let _th = thread::spawn(move || {
         read_input(sender);
     });
     print_tasks(&processes);
-    let mut monitor = Monitor::new(processes, tasks, rx);
+    let mut monitor = Monitor::new(processes, tasks, receiver);
     monitor.task_manager_loop();
 }

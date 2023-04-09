@@ -1,5 +1,5 @@
 loop:
-  cmd: "bash interceptor.sh"
+  cmd: "bash intercep.sh"
   numprocs: 1
   umask: 0022
   workingdir: "."

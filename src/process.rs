@@ -1,5 +1,5 @@
 use std::{process::{Child, Command}, time::Instant};
-
+use libc::{self, mode_t};
 use crate::{task_utils::sigtype_to_string, task::Task};
 
 #[derive(Debug, PartialEq, Clone)]
@@ -38,13 +38,14 @@ impl Process {
         if let Some(_child) = &self.child {
             return println!("Process {} is already running", self.id);
         }
+        // TODO test supervisor with bad cmd to see if it retry
         match task.cmd.spawn() {
             Ok(child) => {
                 self.status = Status::Starting;
                 self.timer = Instant::now();
                 self.child = Some(child);
             }
-            Err(error) => {}// add option err in process to display in status ?
+            Err(error) => {println!("{}", error)}// add option err in process to display in status ?
         }
         self.retries += 1;
     }
@@ -77,6 +78,19 @@ impl Process {
                 }
                 Err(e) => {println!("{}", e)}
             }
+        }
+    }
+    
+    fn set_umask(&self, new_umask: libc::mode_t) -> Result<mode_t, String> {
+        let old_umask = unsafe { libc::umask(0) };
+        if old_umask != 0 {
+            return Err(String::from("Failed to get current umask"));
+        }
+        let result = unsafe { libc::umask(new_umask) };
+        if result != 0 {
+            Err(String::from("Failed to set umask"))
+        } else {
+            Ok(old_umask)
         }
     }
 }
