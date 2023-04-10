@@ -133,11 +133,12 @@ pub fn print_tasks(processes: &Vec<Process>) {
 	println!("Printing processes:");
     for process in processes {
 		println!("----------------------------------------------------------");
-		println!("Task: {} ------", process.task_name);
 		if let Some(child) = &process.child {
-			println!("Pid: {:?}", child.id());
+			println!("{}		{:?}		pid {}", process.task_name, process.status, child.id());
+		} else {
+			println!("{}		{:?}", process.task_name, process.status);
 		}
-		println!("Status: {:?}", process.status);
-		println!("----------------------------------------------------------");
+		// println!("Status: {:?}", process.status);
+		// println!("----------------------------------------------------------");
 	}
 }

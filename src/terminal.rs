@@ -96,7 +96,7 @@ pub fn read_input(sender: Sender<TermInput>) {
     }
 
     let mut new_termios = orig_termios;
-    new_termios.c_lflag &= !(libc::ICANON  | ECHO);
+    new_termios.c_lflag &= !(libc::ICANON | ECHO);
     new_termios.c_iflag &= !(libc::BRKINT | INPCK | ISTRIP | IXON);
     new_termios.c_cflag |= libc::CS8;
 
@@ -241,9 +241,11 @@ pub fn read_input(sender: Sender<TermInput>) {
 				}
        			_ => {
        			  	// Other key pressed, add it to the current word
+					// println!("cursor pos: {}", cursor_pos);
 					word.insert(cursor_pos, c);
 					cursor_pos += 1;
 					clear_line_and_print(&word);
+					print!("\r\x1B[{}C", cursor_pos);
        			}
        		}
 			   io::stdout().flush().unwrap();
