@@ -6,7 +6,7 @@ mod monitor;
 
 use process::Process;
 use task::Task;
-use task_utils::print_tasks;
+use task_utils::print_processes;
 use task_utils::Config;
 use std::path::PathBuf;
 use std::{fs::File, process::exit};
@@ -109,7 +109,7 @@ fn main() {
     let _th = thread::spawn(move || {
         read_input(sender);
     });
-    print_tasks(&processes);
+    print_processes(&processes);
     let mut monitor = Monitor::new(processes, tasks, receiver);
     monitor.task_manager_loop();
 }
