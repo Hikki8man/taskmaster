@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::mpsc::Receiver, time::Duration, process::ExitStatus, os::unix::process::ExitStatusExt};
 
-use crate::{process::{Process, Status}, task::Task, task_utils::{Autorestart, print_tasks}, terminal::TermInput};
+use crate::{process::{Process, Status}, task::Task, task_utils::{Autorestart, print_processes}, terminal::TermInput};
 
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub enum CommandName {
@@ -127,7 +127,7 @@ impl Monitor {
 						}
 					}
 					CommandName::STATUS => {
-						print_tasks(&self.processes);
+						print_processes(&self.processes);
 					}
 				}
 			}
