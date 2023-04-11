@@ -1,5 +1,5 @@
-use std::{process::{Child, Command}, time::Instant};
-use libc::{self, mode_t};
+use std::{process::{Child, Command}, time::Instant, fmt::Octal};
+use libc::{self, mode_t, S_IRUSR, S_IWUSR, umask};
 use crate::{task_utils::sigtype_to_string, task::Task};
 
 #[derive(Debug, PartialEq, Clone)]
@@ -38,16 +38,19 @@ impl Process {
         if let Some(_child) = &self.child {
             return println!("Process {} is already running", self.id);
         }
-        // TODO test supervisor with bad cmd to see if it retry
-        match task.cmd.spawn() {
-            Ok(child) => {
-                self.status = Status::Starting;
-                self.timer = Instant::now();
-                self.child = Some(child);
+        if let Ok(octal_val) = u32::from_str_radix(&task.config.umask, 8) {
+            let old_umask = self.set_umask(octal_val);
+            match task.cmd.spawn() {
+                Ok(child) => {
+                    self.status = Status::Starting;
+                    self.timer = Instant::now();
+                    self.child = Some(child);
+                }
+                Err(error) => {println!("{}", error)}// add option err in process to display in status ?
             }
-            Err(error) => {println!("{}", error)}// add option err in process to display in status ?
+            self.retries += 1;
+            self.set_umask(old_umask);
         }
-        self.retries += 1;
     }
 
     pub fn stop(&mut self, task: &mut Task) {
@@ -81,16 +84,9 @@ impl Process {
         }
     }
     
-    fn set_umask(&self, new_umask: libc::mode_t) -> Result<mode_t, String> {
-        let old_umask = unsafe { libc::umask(0) };
-        if old_umask != 0 {
-            return Err(String::from("Failed to get current umask"));
-        }
-        let result = unsafe { libc::umask(new_umask) };
-        if result != 0 {
-            Err(String::from("Failed to set umask"))
-        } else {
-            Ok(old_umask)
-        }
+    fn set_umask(&self, new_umask: libc::mode_t) -> mode_t {
+        let old_umask = unsafe { umask(new_umask) };
+        println!("old_umask: {}", old_umask);
+        old_umask
     }
 }

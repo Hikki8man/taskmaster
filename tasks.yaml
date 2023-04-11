@@ -16,14 +16,14 @@
 
 tache:
   cmd: "bash test.sh"
-  numprocs: 3
-  umask: 0022
+  numprocs: 1
+  umask: 0023
   workingdir: "."
   autostart: true
-  autorestart: never
+  autorestart: always
   exitcodes:
     - 0
-  startretries: 3
+  startretries: 0
   starttime: 2
   stopsignal: TERM
   stoptime: 10
