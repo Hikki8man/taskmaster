@@ -18,8 +18,7 @@ use std::sync::mpsc;
 use std::process::{Command};
 
 use crate::monitor::Monitor;
-use crate::terminal::TermInput;
-use crate::terminal::read_input;
+use crate::terminal::{TermInput, Terminal};
 
 macro_rules! print_exit {
 	($err_msg:expr, $err_code:expr) => {
@@ -76,7 +75,7 @@ fn main() {
 		}
 	}
 
-	print_config(&config);
+	// print_config(&config);
   
     let mut tasks: std::collections::HashMap<String, Task> = std::collections::HashMap::new();
     let mut processes: Vec<Process> = vec![];
@@ -90,6 +89,9 @@ fn main() {
         let stderr = File::create(config.stderr.as_str()).unwrap();
         let cmd_str = vec.next().expect("msg");
         let mut cmd = Command::new(cmd_str);
+		if let Some(env) = &config.env {
+			cmd.envs(env);
+		}
         cmd.stdout(stdout);
         cmd.stderr(stderr);
         cmd.args(vec);
@@ -107,11 +109,12 @@ fn main() {
         }
         tasks.insert(name, task);
     }
-
-    let _th = thread::spawn(move || {
-        read_input(sender);
-    });
     print_processes(&processes);
+
     let mut monitor = Monitor::new(processes, tasks, receiver);
+    let _th = thread::spawn(move || {
+		let mut terminal: Terminal = Terminal::new(sender);
+		terminal.read_input();
+    });
     monitor.task_manager_loop();
 }

@@ -1,4 +1,7 @@
-use std::{collections::HashMap, sync::mpsc::Receiver, time::Duration, process::ExitStatus, os::unix::process::ExitStatusExt};
+use std::{collections::HashMap, sync::{mpsc::Receiver, Arc, atomic::{AtomicBool, Ordering}}, time::Duration, process::ExitStatus, os::unix::process::ExitStatusExt, ffi::c_int};
+
+use libc::{SIGHUP, signal};
+pub static RELOAD: AtomicBool = AtomicBool::new(false);
 
 use crate::{process::{Process, Status}, task::Task, task_utils::{Autorestart, print_processes}, terminal::TermInput};
 
@@ -18,7 +21,13 @@ pub struct Monitor {
 
 impl Monitor {
 	pub fn new(processes: Vec<Process>, tasks: HashMap<String, Task>, receiver: Receiver<TermInput>) -> Monitor {
+		// self::reload = Arc::new(AtomicBool::new(false));
+		unsafe { signal(SIGHUP, Self::handle_sighup_signal as usize)};
 		Monitor { processes, tasks, receiver }
+	}
+
+	fn handle_sighup_signal(_: i32) {
+		RELOAD.store(true, Ordering::SeqCst);
 	}
 
 	fn check_state(process: &mut Process, task: &mut Task) {
@@ -47,6 +56,10 @@ impl Monitor {
 	}
 	pub fn task_manager_loop(&mut self) {
 		loop {
+			if RELOAD.load(Ordering::SeqCst) == true {
+				println!("waw");
+				RELOAD.store(false, Ordering::SeqCst);
+			}
 			for process in self.processes.iter_mut() {
 				let task = self.tasks.get_mut(process.task_name.as_str()).expect("lol");//Todo unwrapor and kill processes
 				
@@ -77,7 +90,7 @@ impl Monitor {
 											process.start(task);
 										}
 										Autorestart::Unexpected => {
-											if !task.config.exitcodes.contains(&status.code().unwrap_or(0)) {
+											if status.code().is_none() || !task.config.exitcodes.contains(&status.code().unwrap_or(0)) {
 												process.start(task);
 											} else {
 												process.status = Status::Stopped;

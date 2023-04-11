@@ -1,3 +1,6 @@
+# loop:
+#   cmd: "bash interceptor.sh"
+#   numprocs: 1000
 loop:
   cmd: "bash interceptor.sh"
   numprocs: 3
@@ -20,12 +23,28 @@ loop:
 #   umask: 0022
 #   workingdir: "."
 #   autostart: true
-#   autorestart: never
+#   autorestart: unexpected
 #   exitcodes:
 #     - 0
-#   startretries: 3
-#   starttime: 2
+#   startretries: 2
+#   starttime: 10
 #   stopsignal: TERM
 #   stoptime: 10
-#   stdout: output1.txt
+#   stdout: output.txt
 #   stderr: err.txt
+
+tache:
+  cmd: "bash test.sh"
+  numprocs: 1
+  umask: 0023
+  workingdir: "."
+  autostart: true
+  autorestart: always
+  exitcodes:
+    - 0
+  startretries: 0
+  starttime: 2
+  stopsignal: TERM
+  stoptime: 10
+  stdout: output.txt
+  stderr: err.txt
