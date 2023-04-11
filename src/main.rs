@@ -6,7 +6,7 @@ mod monitor;
 
 use process::Process;
 use task::Task;
-use task_utils::print_processes;
+use task_utils::{print_processes, print_config};
 use task_utils::Config;
 use std::path::PathBuf;
 use std::{fs::File, process::exit};
@@ -75,6 +75,8 @@ fn main() {
 			print_exit!(format!("Configuration file error: {}", e), 1);
 		}
 	}
+
+	print_config(&config);
   
     let mut tasks: std::collections::HashMap<String, Task> = std::collections::HashMap::new();
     let mut processes: Vec<Process> = vec![];

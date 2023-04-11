@@ -96,19 +96,79 @@ pub fn sigtype_to_string(sigtype: &Sigtype) -> &'static str {
 #[serde(deny_unknown_fields)]
 pub struct Config {
 	pub cmd: String,
+	#[serde(default = "default_numprocs")]
 	pub numprocs: u32,
+	#[serde(default = "default_umask")]
 	pub umask: String,
+	#[serde(default = "default_workingdir")]
 	pub workingdir: String,
+	#[serde(default = "default_autostart")]
 	pub autostart: bool,
+	#[serde(default = "default_autorestart")]
 	pub autorestart: Autorestart,
+	#[serde(default = "default_exitcodes")]
 	pub exitcodes: Vec<i32>,
+	#[serde(default = "default_startretries")]
 	pub startretries: u32,
+	#[serde(default = "default_starttime")]
 	pub starttime: u32,
+	#[serde(default = "default_stopsignal")]
 	pub stopsignal: Sigtype,
+	#[serde(default = "default_stoptime")]
 	pub stoptime: u32,
+	#[serde(default = "default_stdout")]
 	pub stdout: String,
+	#[serde(default = "default_stderr")]
 	pub stderr: String,
 	pub env: Option<BTreeMap<String, String>>,
+}
+
+fn default_numprocs() -> u32 {
+	1
+}
+
+fn default_umask() -> String {
+	"022".to_string()
+}
+
+fn default_workingdir() -> String {
+	".".to_string()
+}
+
+fn default_autostart() -> bool {
+	true
+}
+
+fn default_exitcodes() -> Vec<i32> {
+	vec![0]
+}
+
+fn default_autorestart() -> Autorestart {
+	Autorestart::Unexpected
+}
+
+fn default_startretries() -> u32 {
+	3
+}
+
+fn default_starttime() -> u32 {
+	1
+}
+
+fn default_stopsignal() -> Sigtype {
+	Sigtype::TERM
+}
+
+fn default_stoptime() -> u32 {
+	10
+}
+
+fn default_stdout() -> String {
+	"output.txt".to_string()
+}
+
+fn default_stderr() -> String {
+	"err.txt".to_string()
 }
 
 pub fn print_config(tasks: &BTreeMap<String, Config>) {
