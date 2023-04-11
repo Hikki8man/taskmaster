@@ -1,5 +1,5 @@
 use std::{collections::{HashMap, BTreeMap}};
-use serde::{Serialize, Deserialize};
+use serde::{Serialize, Deserialize, Deserializer};
 
 use crate::process::Status;
 use crate::{Process};
@@ -57,39 +57,39 @@ pub enum Sigtype {
 }
 
 pub fn sigtype_to_string(sigtype: &Sigtype) -> &'static str {
-    match sigtype {
-        Sigtype::HUP => "HUP",
-        Sigtype::INT => "INT",
-        Sigtype::QUIT => "QUIT",
-        Sigtype::ILL => "ILL",
-        Sigtype::TRAP => "TRAP",
-        Sigtype::ABRT => "ABRT",
-        Sigtype::EMT => "EMT",
-        Sigtype::FPE => "FPE",
-        Sigtype::KILL => "KILL",
-        Sigtype::BUS => "BUS",
-        Sigtype::SEGV => "SEGV",
-        Sigtype::SYS => "SYS",
-        Sigtype::PIPE => "PIPE",
-        Sigtype::ALRM => "ALRM",
-        Sigtype::TERM => "TERM",
-        Sigtype::URG => "URG",
-        Sigtype::STOP => "STOP",
-        Sigtype::TSTP => "TSTP",
-        Sigtype::CONT => "CONT",
-        Sigtype::CHLD => "CHLD",
-        Sigtype::TTIN => "TTIN",
-        Sigtype::TTOU => "TTOU",
-        Sigtype::IO => "IO",
-        Sigtype::XCPU => "XCPU",
-        Sigtype::XFSZ => "XFSZ",
-        Sigtype::VTALRM => "VTALRM",
-        Sigtype::PROF => "PROF",
-        Sigtype::WINCH => "WINCH",
-        Sigtype::INFO => "INFO",
-        Sigtype::USR1 => "USR1",
-        Sigtype::USR2 => "USR2",
-    }
+	match sigtype {
+		Sigtype::HUP => "HUP",
+		Sigtype::INT => "INT",
+		Sigtype::QUIT => "QUIT",
+		Sigtype::ILL => "ILL",
+		Sigtype::TRAP => "TRAP",
+		Sigtype::ABRT => "ABRT",
+		Sigtype::EMT => "EMT",
+		Sigtype::FPE => "FPE",
+		Sigtype::KILL => "KILL",
+		Sigtype::BUS => "BUS",
+		Sigtype::SEGV => "SEGV",
+		Sigtype::SYS => "SYS",
+		Sigtype::PIPE => "PIPE",
+		Sigtype::ALRM => "ALRM",
+		Sigtype::TERM => "TERM",
+		Sigtype::URG => "URG",
+		Sigtype::STOP => "STOP",
+		Sigtype::TSTP => "TSTP",
+		Sigtype::CONT => "CONT",
+		Sigtype::CHLD => "CHLD",
+		Sigtype::TTIN => "TTIN",
+		Sigtype::TTOU => "TTOU",
+		Sigtype::IO => "IO",
+		Sigtype::XCPU => "XCPU",
+		Sigtype::XFSZ => "XFSZ",
+		Sigtype::VTALRM => "VTALRM",
+		Sigtype::PROF => "PROF",
+		Sigtype::WINCH => "WINCH",
+		Sigtype::INFO => "INFO",
+		Sigtype::USR1 => "USR1",
+		Sigtype::USR2 => "USR2",
+	}
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -99,6 +99,7 @@ pub struct Config {
 	#[serde(default = "default_numprocs")]
 	pub numprocs: u32,
 	#[serde(default = "default_umask")]
+	#[serde(deserialize_with = "umask_deserializer")]
 	pub umask: String,
 	#[serde(default = "default_workingdir")]
 	pub workingdir: String,
@@ -121,6 +122,17 @@ pub struct Config {
 	#[serde(default = "default_stderr")]
 	pub stderr: String,
 	pub env: Option<BTreeMap<String, String>>,
+}
+
+fn umask_deserializer<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s: &str = Deserialize::deserialize(deserializer)?;
+    match u16::from_str_radix(s, 8) {
+        Ok(n) if n <= 0o777 => Ok(format!("{:03o}", n)),
+        _ => Err(serde::de::Error::custom(format!("Invalid umask: {}", s))),
+    }
 }
 
 fn default_numprocs() -> u32 {
@@ -172,7 +184,7 @@ fn default_stderr() -> String {
 }
 
 pub fn print_config(tasks: &BTreeMap<String, Config>) {
-    for (name, task) in tasks {
+	for (name, task) in tasks {
 		println!("App: {}", name);
 		println!("\tStart Command: {}", task.cmd);
 		println!("\tNumber of Processes: {}", task.numprocs);
@@ -202,7 +214,7 @@ pub fn print_config(tasks: &BTreeMap<String, Config>) {
 // unused
 pub fn print_tasks(processes: &Vec<Process>) {
 	println!("Printing processes:");
-    for process in processes {
+	for process in processes {
 		println!("----------------------------------------------------------");
 		if let Some(child) = &process.child {
 			println!("{}		{:?}		pid {}", process.task_name, process.status, child.id());
@@ -218,7 +230,7 @@ pub fn print_processes(processes: &Vec<Process>) {
 	// println!("Task List:");
 	println!("[Task Name]\t-\t[Status]\t-\t[PID]");
 	println!("------------------------------------------------------");
-    for process in processes {
+	for process in processes {
 		let status = match &process.status {
 			Status::Running => "\x1B[32mRunning\x1B[0m",
 			Status::Stopping => "\x1B[31mStopping\x1B[0m",
