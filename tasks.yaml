@@ -4,7 +4,7 @@
 loop:
   cmd: "bash interceptor.sh"
   numprocs: 3
-  umask: 877
+  umask: 777
   workingdir: "."
   autostart: true
   autorestart: unexpected

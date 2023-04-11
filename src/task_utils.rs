@@ -117,10 +117,8 @@ pub struct Config {
 	pub stopsignal: Sigtype,
 	#[serde(default = "default_stoptime")]
 	pub stoptime: u32,
-	#[serde(default = "default_stdout")]
-	pub stdout: String,
-	#[serde(default = "default_stderr")]
-	pub stderr: String,
+	pub stdout: Option<String>,
+	pub stderr: Option<String>,
 	pub env: Option<BTreeMap<String, String>>,
 }
 
@@ -175,14 +173,6 @@ fn default_stoptime() -> u32 {
 	10
 }
 
-fn default_stdout() -> String {
-	"output.txt".to_string()
-}
-
-fn default_stderr() -> String {
-	"err.txt".to_string()
-}
-
 pub fn print_config(tasks: &BTreeMap<String, Config>) {
 	for (name, task) in tasks {
 		println!("App: {}", name);
@@ -200,8 +190,12 @@ pub fn print_config(tasks: &BTreeMap<String, Config>) {
 		println!("\tStart Time: {}", task.starttime);
 		println!("\tStop Signal: {:?}", task.stopsignal);
 		println!("\tStop Time: {}", task.stoptime);
-		println!("\tNormal Output: {}", task.stdout);
-		println!("\tError Output: {}", task.stderr);
+		if let Some(stdout) = &task.stdout {
+			println!("\tNormal Output: {}", stdout);
+		}
+		if let Some(stderr) = &task.stderr {
+			println!("\tError Output: {}", stderr);
+		}
 		if let Some(env) = &task.env {
 			println!("\tEnv: ");
 			for (key, value) in env {
