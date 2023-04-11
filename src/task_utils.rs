@@ -1,7 +1,17 @@
-use std::{collections::{BTreeMap}};
+use std::{collections::{HashMap, BTreeMap}};
 use serde::{Serialize, Deserialize};
 
+use crate::process::Status;
 use crate::{Process};
+
+macro_rules! print_process {
+	($proc_name:expr, $proc_status:expr) => {
+		println!("{:<15}\t-\t{}", $proc_name, $proc_status);
+	};
+	($proc_name:expr, $proc_status:expr, $proc_pid:expr) => {
+		println!("{:<15}\t-\t{:<23}\t-\t{}", $proc_name, $proc_status, $proc_pid);
+	};
+}
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "snake_case")]
@@ -86,19 +96,79 @@ pub fn sigtype_to_string(sigtype: &Sigtype) -> &'static str {
 #[serde(deny_unknown_fields)]
 pub struct Config {
 	pub cmd: String,
+	#[serde(default = "default_numprocs")]
 	pub numprocs: u32,
+	#[serde(default = "default_umask")]
 	pub umask: String,
+	#[serde(default = "default_workingdir")]
 	pub workingdir: String,
+	#[serde(default = "default_autostart")]
 	pub autostart: bool,
+	#[serde(default = "default_autorestart")]
 	pub autorestart: Autorestart,
+	#[serde(default = "default_exitcodes")]
 	pub exitcodes: Vec<i32>,
+	#[serde(default = "default_startretries")]
 	pub startretries: u32,
+	#[serde(default = "default_starttime")]
 	pub starttime: u32,
+	#[serde(default = "default_stopsignal")]
 	pub stopsignal: Sigtype,
+	#[serde(default = "default_stoptime")]
 	pub stoptime: u32,
+	#[serde(default = "default_stdout")]
 	pub stdout: String,
+	#[serde(default = "default_stderr")]
 	pub stderr: String,
 	pub env: Option<BTreeMap<String, String>>,
+}
+
+fn default_numprocs() -> u32 {
+	1
+}
+
+fn default_umask() -> String {
+	"022".to_string()
+}
+
+fn default_workingdir() -> String {
+	".".to_string()
+}
+
+fn default_autostart() -> bool {
+	true
+}
+
+fn default_exitcodes() -> Vec<i32> {
+	vec![0]
+}
+
+fn default_autorestart() -> Autorestart {
+	Autorestart::Unexpected
+}
+
+fn default_startretries() -> u32 {
+	3
+}
+
+fn default_starttime() -> u32 {
+	1
+}
+
+fn default_stopsignal() -> Sigtype {
+	Sigtype::TERM
+}
+
+fn default_stoptime() -> u32 {
+	10
+}
+
+fn default_stdout() -> String {
+	"output.txt".to_string()
+}
+
+fn default_stderr() -> String {
+	"err.txt".to_string()
 }
 
 pub fn print_config(tasks: &BTreeMap<String, Config>) {
@@ -129,6 +199,7 @@ pub fn print_config(tasks: &BTreeMap<String, Config>) {
 	}
 }
 
+// unused
 pub fn print_tasks(processes: &Vec<Process>) {
 	println!("Printing processes:");
     for process in processes {
@@ -140,5 +211,28 @@ pub fn print_tasks(processes: &Vec<Process>) {
 		}
 		// println!("Status: {:?}", process.status);
 		// println!("----------------------------------------------------------");
+	}
+}
+
+pub fn print_processes(processes: &Vec<Process>) {
+	// println!("Task List:");
+	println!("[Task Name]\t-\t[Status]\t-\t[PID]");
+	println!("------------------------------------------------------");
+    for process in processes {
+		let status = match &process.status {
+			Status::Running => "\x1B[32mRunning\x1B[0m",
+			Status::Stopping => "\x1B[31mStopping\x1B[0m",
+			Status::Stopped => "\x1b[30mStopped\x1B[0m",
+			Status::Restarting => "\x1B[33mRestarting\x1B[0m",
+			Status::Fatal => "\x1B[31mFatal\x1B[0m",
+			_ => "\x1B[33mStarting\x1B[0m",
+		};
+		let format = if processes.len() > 1 { format!("{}:{}", process.task_name, process.id) }
+			else { process.task_name.clone() };
+		if let Some(child) = &process.child {
+			print_process!(format, status, child.id());
+		} else {
+			print_process!(format, status);
+		}
 	}
 }
