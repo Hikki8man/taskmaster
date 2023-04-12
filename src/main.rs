@@ -85,15 +85,73 @@ fn main() {
     for(name, config) in config {
 
         let mut vec = config.cmd.split_whitespace();
-        let stdout = File::create(config.stdout.as_str()).unwrap();
-        let stderr = File::create(config.stderr.as_str()).unwrap();
+        // let stderr = File::create(config.stderr.as_str()).unwrap();
         let cmd_str = vec.next().expect("msg");
         let mut cmd = Command::new(cmd_str);
+		//TODO test when supervisor cant open file
+		if let Some(stdout) = &config.stdout {
+			match File::create(stdout.as_str()) {
+				Ok(file) => {
+					cmd.stdout(file);
+					&mut cmd
+				}
+				Err(_) => {
+					println!("Failed to create output file.");
+					match File::create("/dev/null") {
+						Ok(dev_null) => {
+							cmd.stdout(dev_null);
+						}
+						Err(e) => {{
+							eprintln!("error: {}", e);
+						}}
+					}
+					&mut cmd
+				}
+			};
+		} else {
+			match File::create("/dev/null") {
+				Ok(dev_null) => {
+					cmd.stdout(dev_null);
+				}
+				Err(e) => {{
+					eprintln!("error: {}", e);
+				}}
+			}
+		}
+
+		if let Some(stderr) = &config.stderr {
+			match File::create(stderr.as_str()) {
+				Ok(file) => {
+					cmd.stderr(file);
+					&mut cmd
+				}
+				Err(_) => {
+					println!("Failed to create err output file.");
+					match File::create("/dev/null") {
+						Ok(dev_null) => {
+							cmd.stderr(dev_null);
+						}
+						Err(_) => {}
+					}
+					&mut cmd
+				}
+			};
+		} else {
+			match File::create("/dev/null") {
+				Ok(dev_null) => {
+					cmd.stderr(dev_null);
+				}
+				Err(e) => {{
+					eprintln!("error: {}", e);
+				}}
+			}
+		}
+
 		if let Some(env) = &config.env {
 			cmd.envs(env);
 		}
-        cmd.stdout(stdout);
-        cmd.stderr(stderr);
+        // cmd.stdout(stdout);
+        // cmd.stderr(stderr);
         cmd.args(vec);
         cmd.current_dir(config.workingdir.as_str());
 

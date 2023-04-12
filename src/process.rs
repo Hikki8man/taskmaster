@@ -86,7 +86,6 @@ impl Process {
     
     fn set_umask(&self, new_umask: libc::mode_t) -> mode_t {
         let old_umask = unsafe { umask(new_umask) };
-        println!("old_umask: {}", old_umask);
         old_umask
     }
 }

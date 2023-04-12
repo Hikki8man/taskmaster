@@ -57,7 +57,6 @@ impl Monitor {
 	pub fn task_manager_loop(&mut self) {
 		loop {
 			if RELOAD.load(Ordering::SeqCst) == true {
-				println!("waw");
 				RELOAD.store(false, Ordering::SeqCst);
 			}
 			for process in self.processes.iter_mut() {
