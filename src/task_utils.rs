@@ -11,6 +11,9 @@ macro_rules! print_process {
 	($proc_name:expr, $proc_status:expr, $proc_pid:expr) => {
 		println!("{:<15}\t-\t{:<23}\t-\t{}", $proc_name, $proc_status, $proc_pid);
 	};
+	($proc_name:expr, $proc_status:expr, $proc_pid:expr, $proc_uptime:expr) => {
+		println!("{:<15}\t-\t{:<23}\t-\t{}\t-\t{}", $proc_name, $proc_status, $proc_pid, $proc_uptime);
+	};
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -228,8 +231,8 @@ pub fn print_tasks(processes: &Vec<Process>) {
 
 pub fn print_processes(processes: &Vec<Process>) {
 	// println!("Task List:");
-	println!("[Task Name]\t-\t[Status]\t-\t[PID]");
-	println!("------------------------------------------------------");
+	println!("[Task Name]\t-\t[Status]\t-\t[PID]\t-\t[UPTIME]");
+	println!("------------------------------------------------------------------------");
 	for process in processes {
 		let status = match &process.status {
 			Status::Running => "\x1B[32mRunning\x1B[0m",
@@ -242,7 +245,18 @@ pub fn print_processes(processes: &Vec<Process>) {
 		let format = if processes.len() > 1 { format!("{}:{}", process.task_name, process.id) }
 			else { process.task_name.clone() };
 		if let Some(child) = &process.child {
-			print_process!(format, status, child.id());
+			let uptime = process.uptime.elapsed();
+			let uptime_formatted = format!(
+				"{:02}:{:02}:{:02}", 
+				uptime.as_secs() / 3600, 
+				(uptime.as_secs() / 60) % 60, 
+				uptime.as_secs() % 60
+			);
+			if process.status == Status::Running {
+				print_process!(format, status, child.id(), uptime_formatted);
+			} else {
+				print_process!(format, status, child.id());
+			}
 		} else {
 			print_process!(format, status);
 		}
