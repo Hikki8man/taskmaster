@@ -1,9 +1,10 @@
 use std::{collections::{HashMap, BTreeMap}};
 use serde::{Serialize, Deserialize, Deserializer};
 
-use crate::process::Status;
+use crate::{process::Status, task::Task};
 use crate::{Process};
 
+#[macro_export]
 macro_rules! print_process {
 	($proc_name:expr, $proc_status:expr) => {
 		println!("{:<15}\t-\t{}", $proc_name, $proc_status);
@@ -103,7 +104,7 @@ pub struct Config {
 	pub numprocs: u32,
 	#[serde(default = "default_umask")]
 	#[serde(deserialize_with = "umask_deserializer")]
-	pub umask: String,
+	pub umask: u32,
 	#[serde(default = "default_workingdir")]
 	pub workingdir: String,
 	#[serde(default = "default_autostart")]
@@ -120,30 +121,26 @@ pub struct Config {
 	pub stopsignal: Sigtype,
 	#[serde(default = "default_stoptime")]
 	pub stoptime: u32,
-	#[serde(default = "default_stdout")]
-	pub stdout: String,
-	#[serde(default = "default_stderr")]
-	pub stderr: String,
+	pub stdout: Option<String>,
+	pub stderr: Option<String>,
 	pub env: Option<BTreeMap<String, String>>,
 }
 
-fn umask_deserializer<'de, D>(deserializer: D) -> Result<String, D::Error>
+fn umask_deserializer<'de, D>(deserializer: D) -> Result<u32, D::Error>
 where
     D: Deserializer<'de>,
 {
-    let s: &str = Deserialize::deserialize(deserializer)?;
-    match u16::from_str_radix(s, 8) {
-        Ok(n) if n <= 0o777 => Ok(format!("{:03o}", n)),
-        _ => Err(serde::de::Error::custom(format!("Invalid umask: {}", s))),
-    }
+    let s = String::deserialize(deserializer)?;
+
+	u32::from_str_radix(&s.parse::<String>().map_err(serde::de::Error::custom)?, 8).map_err(serde::de::Error::custom)
 }
 
 fn default_numprocs() -> u32 {
 	1
 }
 
-fn default_umask() -> String {
-	"022".to_string()
+fn default_umask() -> u32 {
+	19
 }
 
 fn default_workingdir() -> String {
@@ -178,14 +175,6 @@ fn default_stoptime() -> u32 {
 	10
 }
 
-fn default_stdout() -> String {
-	"output.txt".to_string()
-}
-
-fn default_stderr() -> String {
-	"err.txt".to_string()
-}
-
 pub fn print_config(tasks: &BTreeMap<String, Config>) {
 	for (name, task) in tasks {
 		println!("App: {}", name);
@@ -203,62 +192,17 @@ pub fn print_config(tasks: &BTreeMap<String, Config>) {
 		println!("\tStart Time: {}", task.starttime);
 		println!("\tStop Signal: {:?}", task.stopsignal);
 		println!("\tStop Time: {}", task.stoptime);
-		println!("\tNormal Output: {}", task.stdout);
-		println!("\tError Output: {}", task.stderr);
+		if let Some(stdout) = &task.stdout {
+			println!("\tNormal Output: {}", stdout);
+		}
+		if let Some(stderr) = &task.stderr {
+			println!("\tError Output: {}", stderr);
+		}
 		if let Some(env) = &task.env {
 			println!("\tEnv: ");
 			for (key, value) in env {
 				println!("\t\t- {}: {}", key, value);
 			}
-		}
-	}
-}
-
-// unused
-pub fn print_tasks(processes: &Vec<Process>) {
-	println!("Printing processes:");
-	for process in processes {
-		println!("----------------------------------------------------------");
-		if let Some(child) = &process.child {
-			println!("{}		{:?}		pid {}", process.task_name, process.status, child.id());
-		} else {
-			println!("{}		{:?}", process.task_name, process.status);
-		}
-		// println!("Status: {:?}", process.status);
-		// println!("----------------------------------------------------------");
-	}
-}
-
-pub fn print_processes(processes: &Vec<Process>) {
-	// println!("Task List:");
-	println!("[Task Name]\t-\t[Status]\t-\t[PID]\t-\t[UPTIME]");
-	println!("------------------------------------------------------------------------");
-	for process in processes {
-		let status = match &process.status {
-			Status::Running => "\x1B[32mRunning\x1B[0m",
-			Status::Stopping => "\x1B[31mStopping\x1B[0m",
-			Status::Stopped => "\x1b[30mStopped\x1B[0m",
-			Status::Restarting => "\x1B[33mRestarting\x1B[0m",
-			Status::Fatal => "\x1B[31mFatal\x1B[0m",
-			_ => "\x1B[33mStarting\x1B[0m",
-		};
-		let format = if processes.len() > 1 { format!("{}:{}", process.task_name, process.id) }
-			else { process.task_name.clone() };
-		if let Some(child) = &process.child {
-			let uptime = process.uptime.elapsed();
-			let uptime_formatted = format!(
-				"{:02}:{:02}:{:02}", 
-				uptime.as_secs() / 3600, 
-				(uptime.as_secs() / 60) % 60, 
-				uptime.as_secs() % 60
-			);
-			if process.status == Status::Running {
-				print_process!(format, status, child.id(), uptime_formatted);
-			} else {
-				print_process!(format, status, child.id());
-			}
-		} else {
-			print_process!(format, status);
 		}
 	}
 }

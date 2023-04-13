@@ -1,6 +1,7 @@
 #!/bin/bash
-for i in {1..5}
+for i in {1..1000}
 do
-	echo "cc $i"
-	sleep 1
+	echo "tee $i tim"
+	exit 1
+	sleep 2
 done

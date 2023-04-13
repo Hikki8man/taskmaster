@@ -3,7 +3,7 @@ use std::{collections::HashMap, sync::{mpsc::Receiver, Arc, atomic::{AtomicBool,
 use libc::{SIGHUP, signal};
 pub static RELOAD: AtomicBool = AtomicBool::new(false);
 
-use crate::{process::{Process, Status}, task::Task, task_utils::{Autorestart, print_processes}, terminal::TermInput};
+use crate::{process::{Process, Status}, task::Task, task_utils::{Autorestart}, terminal::TermInput, print_process};
 
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub enum CommandName {
@@ -16,14 +16,17 @@ pub enum CommandName {
 pub struct Monitor {
 	processes: Vec<Process>,
 	tasks: HashMap<String, Task>,
-	receiver: Receiver<TermInput>
+	receiver: Receiver<TermInput>,
+	config_path: String,
 }
 
 impl Monitor {
-	pub fn new(processes: Vec<Process>, tasks: HashMap<String, Task>, receiver: Receiver<TermInput>) -> Monitor {
+	pub fn new(processes: Vec<Process>, tasks: HashMap<String, Task>, receiver: Receiver<TermInput>, config_path: String) -> Monitor {
 		// self::reload = Arc::new(AtomicBool::new(false));
 		unsafe { signal(SIGHUP, Self::handle_sighup_signal as usize)};
-		Monitor { processes, tasks, receiver }
+		let monitor = Monitor { processes, tasks, receiver, config_path };
+		monitor.print_processes();
+		return monitor;
 	}
 
 	fn handle_sighup_signal(_: i32) {
@@ -58,7 +61,6 @@ impl Monitor {
 	pub fn task_manager_loop(&mut self) {
 		loop {
 			if RELOAD.load(Ordering::SeqCst) == true {
-				println!("waw");
 				RELOAD.store(false, Ordering::SeqCst);
 			}
 			for process in self.processes.iter_mut() {
@@ -141,11 +143,38 @@ impl Monitor {
 						}
 					}
 					CommandName::STATUS => {
-						print_processes(&self.processes);
+						self.print_processes();
 					}
 				}
 			}
 			Err(_) => {},
 		}
 	}
+
+	pub fn print_processes(&self) {
+		println!("[Task Name]\t-\t[Status]\t-\t[PID]");
+		println!("------------------------------------------------------");
+		for process in &self.processes {
+			let task = self.tasks.get(&process.task_name).unwrap();
+			let status = match &process.status {
+				Status::Running => "\x1B[32mRunning\x1B[0m",
+				Status::Stopping => "\x1B[31mStopping\x1B[0m",
+				Status::Stopped => "\x1b[30mStopped\x1B[0m",
+				Status::Restarting => "\x1B[33mRestarting\x1B[0m",
+				Status::Fatal => "\x1B[31mFatal\x1B[0m",
+				_ => "\x1B[33mStarting\x1B[0m",
+			};
+			let format = if self.processes.len() > 1 { format!("{}:{}", process.task_name, process.id) }
+				else { process.task_name.clone() };
+			if let Some(err) = &task.error {
+				print_process!(format, status, err);
+			}
+			else if let Some(child) = &process.child {
+				print_process!(format, status, child.id());
+			} else {
+				print_process!(format, status);
+			}
+		}
+	}
+	
 }
