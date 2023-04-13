@@ -1,9 +1,9 @@
-use std::{collections::HashMap, sync::{mpsc::Receiver, Arc, atomic::{AtomicBool, Ordering}}, time::{Duration, Instant}, process::ExitStatus, os::unix::process::ExitStatusExt, ffi::c_int};
+use std::{collections::HashMap, sync::{mpsc::Receiver, Arc, atomic::{AtomicBool, Ordering}}, time::{Duration, Instant}, process::{ExitStatus, exit}, os::unix::process::ExitStatusExt, ffi::c_int};
 
 use libc::{SIGHUP, signal};
 pub static RELOAD: AtomicBool = AtomicBool::new(false);
 
-use crate::{process::{Process, Status}, task::Task, task_utils::{Autorestart}, terminal::TermInput, print_process};
+use crate::{process::{Process, Status, self}, task::{Task, self}, task_utils::{Autorestart}, terminal::TermInput, print_process};
 
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub enum CommandName {
@@ -11,6 +11,7 @@ pub enum CommandName {
 	STOP,
     RESTART,
     STATUS,
+	SHUTDOWN,
 }
 
 pub struct Monitor {
@@ -18,13 +19,14 @@ pub struct Monitor {
 	tasks: HashMap<String, Task>,
 	receiver: Receiver<TermInput>,
 	config_path: String,
+	shutdown: bool,
 }
 
 impl Monitor {
 	pub fn new(processes: Vec<Process>, tasks: HashMap<String, Task>, receiver: Receiver<TermInput>, config_path: String) -> Monitor {
 		// self::reload = Arc::new(AtomicBool::new(false));
 		unsafe { signal(SIGHUP, Self::handle_sighup_signal as usize)};
-		let monitor = Monitor { processes, tasks, receiver, config_path };
+		let monitor = Monitor { processes, tasks, receiver, config_path, shutdown: false };
 		monitor.print_processes();
 		return monitor;
 	}
@@ -112,6 +114,13 @@ impl Monitor {
 					}
 				}
 			}
+			if self.shutdown {
+				if self.count_active_processes() == 0 {
+					exit(0);
+				} else {
+					continue;
+				}
+			}
 			self.receive_terminal_command();
 		}
 	}
@@ -145,10 +154,21 @@ impl Monitor {
 					CommandName::STATUS => {
 						self.print_processes();
 					}
+					CommandName::SHUTDOWN => {
+						println!("Shutting down . . .");
+						self.shutdown = true;
+						for (_, task) in &mut self.tasks {
+							task.stop(&mut self.processes);
+						}
+					}
 				}
 			}
 			Err(_) => {},
 		}
+	}
+
+	fn count_active_processes(&self) -> usize {
+		self.processes.iter().filter(|p| p.status != Status::Stopped && p.status != Status::Fatal).count()
 	}
 
 	pub fn print_processes(&self) {

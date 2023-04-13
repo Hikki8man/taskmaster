@@ -260,8 +260,8 @@ impl Terminal {
 				println!("start    stop    restart    status");
 			}
 			"shutdown" => {
-				//TODO stop all process
-				exit(1);
+				let msg: TermInput = TermInput { name: CommandName::SHUTDOWN, arg: String::from("") };
+				sender.send(msg).expect("msg");
 			}
 			_ => {
 				println!("Command not found");
