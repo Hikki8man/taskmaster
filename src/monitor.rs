@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::{mpsc::Receiver, Arc, atomic::{AtomicBool, Ordering}}, time::Duration, process::ExitStatus, os::unix::process::ExitStatusExt, ffi::c_int};
+use std::{collections::HashMap, sync::{mpsc::Receiver, Arc, atomic::{AtomicBool, Ordering}}, time::{Duration, Instant}, process::ExitStatus, os::unix::process::ExitStatusExt, ffi::c_int};
 
 use libc::{SIGHUP, signal};
 pub static RELOAD: AtomicBool = AtomicBool::new(false);
@@ -36,6 +36,7 @@ impl Monitor {
 				if process.timer.elapsed() > Duration::new(task.config.starttime as u64, 0) {
 					process.retries = 0;
 					process.status = Status::Running;
+					process.uptime = Instant::now();
 					println!("{}:{} is now running", process.task_name, process.id);
 				}
 			}

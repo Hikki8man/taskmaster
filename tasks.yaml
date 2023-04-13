@@ -2,9 +2,9 @@
 #   cmd: "bash interceptor.sh"
 #   numprocs: 1000
 loop:
-  cmd: "bash interceptor.sh"
+  cmd: "bash test.sh"
   numprocs: 3
-  umask: 877
+  umask: 777
   workingdir: "."
   autostart: true
   autorestart: unexpected
@@ -33,18 +33,18 @@ loop:
 #   stdout: output.txt
 #   stderr: err.txt
 
-tache:
-  cmd: "bash test.sh"
-  numprocs: 1
-  umask: 0023
-  workingdir: "."
-  autostart: true
-  autorestart: always
-  exitcodes:
-    - 0
-  startretries: 0
-  starttime: 2
-  stopsignal: TERM
-  stoptime: 10
-  stdout: output.txt
-  stderr: err.txt
+# tache:
+#   cmd: "bash test.sh"
+#   numprocs: 1
+#   umask: 0023
+#   workingdir: "."
+#   autostart: true
+#   autorestart: always
+#   exitcodes:
+#     - 0
+#   startretries: 0
+#   starttime: 2
+#   stopsignal: TERM
+#   stoptime: 10
+#   stdout: output.txt
+#   stderr: err.txt
