@@ -8,9 +8,9 @@ loop:
   exitcodes:
     - 0
   startretries: 2
-  starttime: 0
-  stopsignal: TERM
-  stoptime: 0
+  starttime: 1
+  stopsignal: INT
+  stoptime: 20
   stdout: output.txt
   # stderr: err.txt
 
