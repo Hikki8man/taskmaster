@@ -38,8 +38,8 @@ impl Process {
         if let Some(_child) = &self.child {
             return println!("Process {} is already running", self.id);
         }
-        if let Ok(octal_val) = u32::from_str_radix(&task.config.umask, 8) {
-            let old_umask = self.set_umask(octal_val);
+        if task.error.is_none() {
+            let old_umask = self.set_umask(task.config.umask);
             match task.cmd.spawn() {
                 Ok(child) => {
                     self.status = Status::Starting;
@@ -48,8 +48,10 @@ impl Process {
                 }
                 Err(error) => {println!("{}", error)}// add option err in process to display in status ?
             }
-            self.retries += 1;
             self.set_umask(old_umask);
+        } else {
+                self.status = Status::Fatal;
+            self.retries += 1;
         }
     }
 

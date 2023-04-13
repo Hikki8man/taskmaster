@@ -2,11 +2,11 @@
 #   cmd: "bash interceptor.sh"
 #   numprocs: 1000
 loop:
-  cmd: "echo cc"
+  cmd: "bash test.sh"
   numprocs: 1
-  umask: 777
+  umask: 023
   workingdir: "."
-  autostart: true
+  autostart: false
   autorestart: unexpected
   exitcodes:
     - 0
@@ -14,7 +14,7 @@ loop:
   starttime: 10
   stopsignal: TERM
   stoptime: 10
-  # stdout: output.txt
+  stdout: output.txt
   # stderr: err.txt
 
 # tache:

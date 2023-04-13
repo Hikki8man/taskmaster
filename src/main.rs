@@ -8,6 +8,7 @@ use process::Process;
 use task::Task;
 use task_utils::{print_processes, print_config};
 use task_utils::Config;
+use std::fs::OpenOptions;
 use std::path::PathBuf;
 use std::{fs::File, process::exit};
 use std::io::{Read};
@@ -58,7 +59,7 @@ fn main() {
 	{
 		print_exit!("Not a file.", 1);
 	}
-
+	//TODO fix parsing
 	let mut file = File::open("tasks.yaml")
 		.expect("Could not open file...");
 	let mut content = String::new();
@@ -88,60 +89,50 @@ fn main() {
         // let stderr = File::create(config.stderr.as_str()).unwrap();
         let cmd_str = vec.next().expect("msg");
         let mut cmd = Command::new(cmd_str);
-		//TODO test when supervisor cant open file
+		let mut error = String::new();
 		if let Some(stdout) = &config.stdout {
-			match File::create(stdout.as_str()) {
+			match OpenOptions::new().create(true).append(true).open(stdout) {
 				Ok(file) => {
 					cmd.stdout(file);
 					&mut cmd
 				}
-				Err(_) => {
-					println!("Failed to create output file.");
-					match File::create("/dev/null") {
-						Ok(dev_null) => {
-							cmd.stdout(dev_null);
-						}
-						Err(e) => {{
-							eprintln!("error: {}", e);
-						}}
-					}
+				Err(e) => {
+					error = e.to_string();
+					eprintln!("Failed to create output file: {}", e);
 					&mut cmd
 				}
 			};
 		} else {
-			match File::create("/dev/null") {
+			match OpenOptions::new().create(true).append(true).open("/dev/null") {
 				Ok(dev_null) => {
 					cmd.stdout(dev_null);
 				}
 				Err(e) => {{
+					error = e.to_string();
 					eprintln!("error: {}", e);
 				}}
 			}
 		}
 
 		if let Some(stderr) = &config.stderr {
-			match File::create(stderr.as_str()) {
+			match OpenOptions::new().create(true).append(true).open(stderr) {
 				Ok(file) => {
 					cmd.stderr(file);
 					&mut cmd
 				}
-				Err(_) => {
-					println!("Failed to create err output file.");
-					match File::create("/dev/null") {
-						Ok(dev_null) => {
-							cmd.stderr(dev_null);
-						}
-						Err(_) => {}
-					}
+				Err(e) => {
+					error = e.to_string();
+					println!("Failed to create err output file: {}", e);
 					&mut cmd
 				}
 			};
 		} else {
-			match File::create("/dev/null") {
+			match OpenOptions::new().create(true).append(true).open("/dev/null") {
 				Ok(dev_null) => {
 					cmd.stderr(dev_null);
 				}
 				Err(e) => {{
+					error = e.to_string();
 					eprintln!("error: {}", e);
 				}}
 			}
@@ -150,16 +141,17 @@ fn main() {
 		if let Some(env) = &config.env {
 			cmd.envs(env);
 		}
-        // cmd.stdout(stdout);
-        // cmd.stderr(stderr);
         cmd.args(vec);
         cmd.current_dir(config.workingdir.as_str());
 
         let mut task = Task::new(config, cmd, name.clone());
         
+		if !error.is_empty() {
+			task.error = Some(error);
+		}
         for _i in 0..task.config.numprocs {
+			let mut process = Process::new(id, name.clone());
             id += 1;
-            let mut process = Process::new(id, name.clone());
             if task.config.autostart {
                 process.start(&mut task);
             }

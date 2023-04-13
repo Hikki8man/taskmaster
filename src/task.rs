@@ -7,11 +7,12 @@ pub struct Task {
     pub name: String,
     pub config: Config,
     pub cmd: Command,
+    pub error: Option<String>,
 }
 
 impl Task {
     pub fn new(config: Config, cmd: Command, name: String) -> Task {
-        Task { config, cmd, name }
+        Task { config, cmd, name, error: None }
     }
 
     pub fn start(&mut self, processes: &mut Vec<Process>) {

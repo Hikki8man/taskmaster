@@ -100,7 +100,7 @@ pub struct Config {
 	pub numprocs: u32,
 	#[serde(default = "default_umask")]
 	#[serde(deserialize_with = "umask_deserializer")]
-	pub umask: String,
+	pub umask: u32,
 	#[serde(default = "default_workingdir")]
 	pub workingdir: String,
 	#[serde(default = "default_autostart")]
@@ -122,23 +122,21 @@ pub struct Config {
 	pub env: Option<BTreeMap<String, String>>,
 }
 
-fn umask_deserializer<'de, D>(deserializer: D) -> Result<String, D::Error>
+fn umask_deserializer<'de, D>(deserializer: D) -> Result<u32, D::Error>
 where
     D: Deserializer<'de>,
 {
-    let s: &str = Deserialize::deserialize(deserializer)?;
-    match u16::from_str_radix(s, 8) {
-        Ok(n) if n <= 0o777 => Ok(format!("{:03o}", n)),
-        _ => Err(serde::de::Error::custom(format!("Invalid umask: {}", s))),
-    }
+    let s = String::deserialize(deserializer)?;
+
+	u32::from_str_radix(&s.parse::<String>().map_err(serde::de::Error::custom)?, 8).map_err(serde::de::Error::custom)
 }
 
 fn default_numprocs() -> u32 {
 	1
 }
 
-fn default_umask() -> String {
-	"022".to_string()
+fn default_umask() -> u32 {
+	19
 }
 
 fn default_workingdir() -> String {
