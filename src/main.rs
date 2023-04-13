@@ -6,8 +6,9 @@ mod monitor;
 
 use process::Process;
 use task::Task;
-use task_utils::{print_processes, print_config};
+use task_utils::{print_config};
 use task_utils::Config;
+use std::collections::{HashMap, BTreeMap};
 use std::fs::OpenOptions;
 use std::path::PathBuf;
 use std::{fs::File, process::exit};
@@ -33,6 +34,48 @@ fn set_cmd_output(path: &Option<String>) -> io::Result<File> {
 		Some(path) => OpenOptions::new().create(true).append(true).open(path),
 		None => OpenOptions::new().create(true).append(true).open("/dev/null"),
 	}
+}
+
+fn set_task_and_processes(config: BTreeMap<String, Config>) -> (HashMap<String, Task>, Vec<Process>) {
+	let mut tasks: HashMap<String, Task> = HashMap::new();
+	let mut processes: Vec<Process> = vec![];
+	let mut id = 0;
+
+	for(name, config) in config {
+
+        let mut vec = config.cmd.split_whitespace();
+        let cmd_str = vec.next().expect("msg");
+        let mut cmd = Command::new(cmd_str);
+		
+		if let Some(env) = &config.env {
+			cmd.envs(env);
+		}
+        cmd.args(vec);
+        cmd.current_dir(config.workingdir.as_str());
+
+        let mut task = Task::new(config, cmd, name.clone());
+        
+		match set_cmd_output(&task.config.stdout) {
+			Ok(stdout) => { task.cmd.stdout(stdout); }
+			Err(e) => task.error = Some(Box::new(e))
+		}
+		match set_cmd_output(&task.config.stderr) {
+			Ok(stderr) => { task.cmd.stderr(stderr); }
+			Err(e) => task.error = Some(Box::new(e))
+		}
+
+        for _ in 0..task.config.numprocs {
+			let mut process = Process::new(id, name.clone());
+            id += 1;
+            if task.config.autostart {
+                process.start(&mut task);
+            }
+            processes.push(process);
+        }
+        tasks.insert(name, task);
+    }
+
+	(tasks, processes)
 }
 
 fn main() {
@@ -73,7 +116,7 @@ fn main() {
 	file.read_to_string(&mut content)
 		.expect("Could not read file...");
 		
-	let config: std::collections::BTreeMap<String, Config>;
+	let config: BTreeMap<String, Config>;
 	match serde_yaml::from_str(content.as_str()) {
 		Ok(results) => {
 			config = results;
@@ -83,53 +126,10 @@ fn main() {
 		}
 	}
 
-	// print_config(&config);
-  
-    let mut tasks: std::collections::HashMap<String, Task> = std::collections::HashMap::new();
-    let mut processes: Vec<Process> = vec![];
     let (sender, receiver): (Sender<TermInput>, Receiver<TermInput>) = mpsc::channel();
+	let (tasks, processes) = set_task_and_processes(config);
 
-    let mut id = 0;
-    for(name, config) in config {
-
-        let mut vec = config.cmd.split_whitespace();
-        // let stderr = File::create(config.stderr.as_str()).unwrap();
-        let cmd_str = vec.next().expect("msg");
-        let mut cmd = Command::new(cmd_str);
-		
-		if let Some(env) = &config.env {
-			cmd.envs(env);
-		}
-        cmd.args(vec);
-        cmd.current_dir(config.workingdir.as_str());
-
-        let mut task = Task::new(config, cmd, name.clone());
-        
-		match set_cmd_output(&task.config.stdout) {
-			Ok(stdout) => {
-				task.cmd.stdout(stdout);
-			}
-			Err(e) => task.error = Some(e.to_string())
-		}
-		match set_cmd_output(&task.config.stderr) {
-			Ok(stderr) => {
-				task.cmd.stderr(stderr);
-			}
-			Err(e) => task.error = Some(e.to_string())
-		}
-        for _i in 0..task.config.numprocs {
-			let mut process = Process::new(id, name.clone());
-            id += 1;
-            if task.config.autostart {
-                process.start(&mut task);
-            }
-            processes.push(process);
-        }
-        tasks.insert(name, task);
-    }
-    print_processes(&processes);
-
-    let mut monitor = Monitor::new(processes, tasks, receiver);
+    let mut monitor = Monitor::new(processes, tasks, receiver, String::from("tasks.yaml")); //Todo: Get real path
     let _th = thread::spawn(move || {
 		let mut terminal: Terminal = Terminal::new(sender);
 		terminal.read_input();

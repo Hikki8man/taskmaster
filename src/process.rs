@@ -46,13 +46,13 @@ impl Process {
                     self.timer = Instant::now();
                     self.child = Some(child);
                 }
-                Err(error) => {println!("{}", error)}// add option err in process to display in status ?
+                Err(error) => {println!("error: {}", error)}// add option err in process to display in status ?
             }
             self.set_umask(old_umask);
         } else {
-                self.status = Status::Fatal;
-            self.retries += 1;
+            self.status = Status::Fatal;
         }
+        self.retries += 1;
     }
 
     pub fn stop(&mut self, task: &mut Task) {

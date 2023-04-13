@@ -1,4 +1,4 @@
-use std::process::Command;
+use std::{process::Command, error::Error};
 
 use crate::{task_utils::Config, process::Process};
 
@@ -7,7 +7,7 @@ pub struct Task {
     pub name: String,
     pub config: Config,
     pub cmd: Command,
-    pub error: Option<String>,
+    pub error: Option<Box<dyn Error>>,
 }
 
 impl Task {
