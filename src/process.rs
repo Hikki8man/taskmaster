@@ -20,6 +20,7 @@ pub struct Process {
     pub status: Status,
     pub retries: u32,
     pub timer: Instant,
+    pub uptime: Instant,
 }
 
 impl Process {
@@ -31,6 +32,7 @@ impl Process {
             status: Status::Stopped,
             retries: 0,
             timer: Instant::now(),
+            uptime: Instant::now(),
         }
     }
 

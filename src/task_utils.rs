@@ -12,6 +12,9 @@ macro_rules! print_process {
 	($proc_name:expr, $proc_status:expr, $proc_pid:expr) => {
 		println!("{:<15}\t-\t{:<23}\t-\t{}", $proc_name, $proc_status, $proc_pid);
 	};
+	($proc_name:expr, $proc_status:expr, $proc_pid:expr, $proc_uptime:expr) => {
+		println!("{:<15}\t-\t{:<23}\t-\t{}\t-\t{}", $proc_name, $proc_status, $proc_pid, $proc_uptime);
+	};
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -203,29 +206,3 @@ pub fn print_config(tasks: &BTreeMap<String, Config>) {
 		}
 	}
 }
-
-// pub fn print_processes(processes: &Vec<Process>, tasks: &HashMap<std::string::String, Task>) {
-// 	println!("[Task Name]\t-\t[Status]\t-\t[PID]");
-// 	println!("------------------------------------------------------");
-// 	for process in processes {
-// 		let task = tasks.get(&process.task_name).unwrap();
-// 		let status = match &process.status {
-// 			Status::Running => "\x1B[32mRunning\x1B[0m",
-// 			Status::Stopping => "\x1B[31mStopping\x1B[0m",
-// 			Status::Stopped => "\x1b[30mStopped\x1B[0m",
-// 			Status::Restarting => "\x1B[33mRestarting\x1B[0m",
-// 			Status::Fatal => "\x1B[31mFatal\x1B[0m",
-// 			_ => "\x1B[33mStarting\x1B[0m",
-// 		};
-// 		let format = if processes.len() > 1 { format!("{}:{}", process.task_name, process.id) }
-// 			else { process.task_name.clone() };
-// 		if let Some(err) = &task.error {
-// 			print_process!(format, status, err);
-// 		}
-// 		else if let Some(child) = &process.child {
-// 			print_process!(format, status, child.id());
-// 		} else {
-// 			print_process!(format, status);
-// 		}
-// 	}
-// }
