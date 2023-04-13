@@ -4,16 +4,16 @@
 loop:
   cmd: "bash test.sh"
   numprocs: 1
-  umask: 023
+  umask: 022
   workingdir: "."
-  autostart: false
+  autostart: true
   autorestart: unexpected
   exitcodes:
     - 0
   startretries: 2
-  starttime: 10
+  starttime: 1
   stopsignal: TERM
-  stoptime: 10
+  stoptime: 1
   stdout: output.txt
   # stderr: err.txt
 

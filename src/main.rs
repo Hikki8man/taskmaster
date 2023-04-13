@@ -11,7 +11,7 @@ use task_utils::Config;
 use std::fs::OpenOptions;
 use std::path::PathBuf;
 use std::{fs::File, process::exit};
-use std::io::{Read};
+use std::io::{Read, self};
 use std::{env};
 use std::thread;
 use std::sync::mpsc::{Sender, Receiver};
@@ -26,6 +26,13 @@ macro_rules! print_exit {
 		println!("{}", $err_msg);
 		exit($err_code);
 	};
+}
+
+fn set_cmd_output(path: &Option<String>) -> io::Result<File> {
+	match path {
+		Some(path) => OpenOptions::new().create(true).append(true).open(path),
+		None => OpenOptions::new().create(true).append(true).open("/dev/null"),
+	}
 }
 
 fn main() {
@@ -89,55 +96,7 @@ fn main() {
         // let stderr = File::create(config.stderr.as_str()).unwrap();
         let cmd_str = vec.next().expect("msg");
         let mut cmd = Command::new(cmd_str);
-		let mut error = String::new();
-		if let Some(stdout) = &config.stdout {
-			match OpenOptions::new().create(true).append(true).open(stdout) {
-				Ok(file) => {
-					cmd.stdout(file);
-					&mut cmd
-				}
-				Err(e) => {
-					error = e.to_string();
-					eprintln!("Failed to create output file: {}", e);
-					&mut cmd
-				}
-			};
-		} else {
-			match OpenOptions::new().create(true).append(true).open("/dev/null") {
-				Ok(dev_null) => {
-					cmd.stdout(dev_null);
-				}
-				Err(e) => {{
-					error = e.to_string();
-					eprintln!("error: {}", e);
-				}}
-			}
-		}
-
-		if let Some(stderr) = &config.stderr {
-			match OpenOptions::new().create(true).append(true).open(stderr) {
-				Ok(file) => {
-					cmd.stderr(file);
-					&mut cmd
-				}
-				Err(e) => {
-					error = e.to_string();
-					println!("Failed to create err output file: {}", e);
-					&mut cmd
-				}
-			};
-		} else {
-			match OpenOptions::new().create(true).append(true).open("/dev/null") {
-				Ok(dev_null) => {
-					cmd.stderr(dev_null);
-				}
-				Err(e) => {{
-					error = e.to_string();
-					eprintln!("error: {}", e);
-				}}
-			}
-		}
-
+		
 		if let Some(env) = &config.env {
 			cmd.envs(env);
 		}
@@ -146,8 +105,17 @@ fn main() {
 
         let mut task = Task::new(config, cmd, name.clone());
         
-		if !error.is_empty() {
-			task.error = Some(error);
+		match set_cmd_output(&task.config.stdout) {
+			Ok(stdout) => {
+				task.cmd.stdout(stdout);
+			}
+			Err(e) => task.error = Some(e.to_string())
+		}
+		match set_cmd_output(&task.config.stderr) {
+			Ok(stderr) => {
+				task.cmd.stderr(stderr);
+			}
+			Err(e) => task.error = Some(e.to_string())
 		}
         for _i in 0..task.config.numprocs {
 			let mut process = Process::new(id, name.clone());
