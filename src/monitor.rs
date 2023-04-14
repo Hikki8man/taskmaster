@@ -3,7 +3,7 @@ use std::{collections::HashMap, sync::{mpsc::Receiver, Arc, atomic::{AtomicBool,
 use libc::{SIGHUP, signal};
 pub static RELOAD: AtomicBool = AtomicBool::new(false);
 
-use crate::{process::{Process, Status, self}, task::{Task, self}, task_utils::{Autorestart}, terminal::TermInput, print_process};
+use crate::{process::{Process, Status, self}, task::{Task, self}, task_utils::{Autorestart}, terminal::{TermInput, ProcessArg}, print_process};
 
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub enum CommandName {
@@ -128,27 +128,35 @@ impl Monitor {
 	fn receive_terminal_command(&mut self) {
 		match self.receiver.try_recv() {
 			Ok(msg) => {
-				let task = self.tasks.get_mut(&msg.arg);
-				match msg.name {
+				// let task = self.tasks.get_mut(&msg.cmd_name);
+				let cmd: CommandName = msg.cmd_name;
+				let args: Vec<ProcessArg> = msg.args;
+				match cmd {
 					CommandName::START => {
-						if let Some(task) = task {
-							task.start(&mut self.processes);
-						} else {
-							println!("Task not found");
+						for arg in args {
+							if let Some(task) = self.tasks.get_mut(arg.name.as_str()) {
+								task.start(&mut self.processes, arg.id);
+							} else {
+								eprintln!("Process not found");
+							}
 						}
 					}
 					CommandName::STOP => {
-						if let Some(task) = task {
-							task.stop(&mut self.processes);
-						} else {
-							println!("Task not found");
+						for arg in args {
+							if let Some(task) = self.tasks.get_mut(arg.name.as_str()) {
+								task.stop(&mut self.processes, arg.id);
+							} else {
+								eprintln!("Process not found");
+							}
 						}
 					}
 					CommandName::RESTART => {
-						if let Some(task) = task {
-							task.restart(&mut self.processes);
-						} else {
-							println!("Task not found");
+						for arg in args {
+							if let Some(task) = self.tasks.get_mut(arg.name.as_str()) {
+								task.restart(&mut self.processes, arg.id);
+							} else {
+								eprintln!("Process not found");
+							}
 						}
 					}
 					CommandName::STATUS => {
@@ -158,7 +166,7 @@ impl Monitor {
 						println!("Shutting down . . .");
 						self.shutdown = true;
 						for (_, task) in &mut self.tasks {
-							task.stop(&mut self.processes);
+							task.stop(&mut self.processes, String::from("*"));
 						}
 					}
 				}
@@ -172,8 +180,8 @@ impl Monitor {
 	}
 
 	pub fn print_processes(&self) {
-		println!("[Task Name]\t-\t[Status]\t-\t[PID]");
-		println!("------------------------------------------------------");
+		println!("[Task Name]\t-\t[Status]\t-\t[Info]\t-\t[Uptime]");
+		println!("------------------------------------------------------------------------");
 		for process in &self.processes {
 			let task = self.tasks.get(&process.task_name).unwrap();
 			let status = match &process.status {
@@ -190,7 +198,18 @@ impl Monitor {
 				print_process!(format, status, err);
 			}
 			else if let Some(child) = &process.child {
-				print_process!(format, status, child.id());
+				let uptime = process.uptime.elapsed();
+				let uptime_formatted = format!(
+					"{:02}:{:02}:{:02}", 
+					uptime.as_secs() / 3600, 
+					(uptime.as_secs() / 60) % 60, 
+					uptime.as_secs() % 60
+				);
+				if process.status == Status::Running {
+					print_process!(format, status, child.id(), uptime_formatted);
+				} else {
+					print_process!(format, status, child.id());
+				}
 			} else {
 				print_process!(format, status);
 			}

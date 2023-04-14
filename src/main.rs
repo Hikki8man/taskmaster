@@ -39,7 +39,7 @@ fn set_cmd_output(path: &Option<String>) -> io::Result<File> {
 fn set_task_and_processes(config: BTreeMap<String, Config>) -> (HashMap<String, Task>, Vec<Process>) {
 	let mut tasks: HashMap<String, Task> = HashMap::new();
 	let mut processes: Vec<Process> = vec![];
-	let mut id = 0;
+	// let mut id = 0;
 
 	for(name, config) in config {
 
@@ -64,9 +64,9 @@ fn set_task_and_processes(config: BTreeMap<String, Config>) -> (HashMap<String, 
 			Err(e) => task.error = Some(Box::new(e))
 		}
 
-        for _ in 0..task.config.numprocs {
+        for id in 0..task.config.numprocs {
 			let mut process = Process::new(id, name.clone());
-            id += 1;
+            // id += 1;
             if task.config.autostart {
                 process.start(&mut task);
             }

@@ -15,29 +15,34 @@ impl Task {
         Task { config, cmd, name, error: None }
     }
 
-    pub fn start(&mut self, processes: &mut Vec<Process>) {
-        for process in processes {
-            if process.task_name == self.name {
-                process.retries = 0;
-                process.start(self);
-            }
+    fn get_processes_by_task_and_id(&mut self, processes: &mut Vec<Process>, id: String) -> Vec<&mut Process> {
+        processes.iter_mut()
+        .filter(|e| e.task_name == self.name)
+        .filter(|e| e.id.to_string() == id || id == "*")
+        .collect()
+    }
+
+    // .contain
+    pub fn start(&mut self, processes: &mut Vec<Process>, id: String) {
+       let procs = self.get_processes_by_task_and_id(processes, id);
+        for process in procs {
+            process.retries = 0;
+            process.start(self);
         }
     }
 
-    pub fn stop(&mut self, processes: &mut Vec<Process>) {
-        for process in processes {
-            if process.task_name == self.name {
-                process.stop(self);
-            }
+    pub fn stop(&mut self, processes: &mut Vec<Process>, id: String) {
+        let procs = self.get_processes_by_task_and_id(processes, id);
+        for process in procs {
+            process.stop(self);
         }
     }
 
-    pub fn restart(&mut self, processes: &mut Vec<Process>) {
-        for process in processes {
-            if process.task_name == self.name {
-                process.retries = 0;
-                process.restart(self);
-            }
+    pub fn restart(&mut self, processes: &mut Vec<Process>, id: String) {
+        let procs = self.get_processes_by_task_and_id(processes, id);
+        for process in procs {
+            process.retries = 0;
+            process.restart(self);
         }
     }
 }
