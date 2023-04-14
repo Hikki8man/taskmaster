@@ -23,10 +23,6 @@ pub struct TermInput {
 
 impl TermInput {
 	pub fn new(cmd_name: CommandName, args: Vec<ProcessArg>) -> TermInput {
-		// let mut arg = task_arg.1;
-		// if arg.is_empty() {
-		// 	arg = String::from("*");
-		// }
 		TermInput { cmd_name, args }
 	}
 }
@@ -237,7 +233,7 @@ impl Terminal {
 	}
 
 	fn get_task_and_arg(str: &str) -> ProcessArg {
-		let mut args_splited: Vec<&str> = str.splitn(2, ":").collect();
+		let args_splited: Vec<&str> = str.splitn(2, ":").collect();
 		let name = String::from(args_splited[0]);
 		let id = String::from(
 			if let Some(id) = args_splited.get(1) {
@@ -274,7 +270,7 @@ impl Terminal {
 		}
 
 		let (cmd, args) = Self::parse_args(&input);
-		println!("Args: {:?}", args);
+		// println!("Args: {:?}", args);
 		if let Some(cmd) = cmd {
 			match cmd.as_str() {
 				"start" => {

@@ -15,16 +15,26 @@ impl Task {
         Task { config, cmd, name, error: None }
     }
 
-    fn get_processes_by_task_and_id(&mut self, processes: &mut Vec<Process>, id: String) -> Vec<&mut Process> {
-        processes.iter_mut()
-        .filter(|e| e.task_name == self.name)
-        .filter(|e| e.id.to_string() == id || id == "*")
-        .collect()
+    fn get_processes_by_task_and_id(task_name: String, processes: &mut Vec<Process>, id: String) -> Vec<&mut Process> { 
+        let procs: Vec<&mut Process> = if id == "*" {
+            processes.iter_mut()
+                .filter(|e| e.task_name == task_name)
+                .collect()
+        } else {
+            processes.iter_mut()
+                .filter(|e| e.task_name == task_name && e.id.to_string() == id)
+                .collect()
+        };
+        match procs.is_empty() {
+            true if id == "*" => eprintln!("No processes found for task {}", task_name),
+            true => eprintln!("Process {}:{} not found", task_name, id),
+            false => {},
+        }
+        procs
     }
-
-    // .contain
+    
     pub fn start(&mut self, processes: &mut Vec<Process>, id: String) {
-       let procs = self.get_processes_by_task_and_id(processes, id);
+       let procs = Self::get_processes_by_task_and_id(self.name.to_string(), processes, id.to_string());
         for process in procs {
             process.retries = 0;
             process.start(self);
@@ -32,14 +42,14 @@ impl Task {
     }
 
     pub fn stop(&mut self, processes: &mut Vec<Process>, id: String) {
-        let procs = self.get_processes_by_task_and_id(processes, id);
+        let procs = Self::get_processes_by_task_and_id(self.name.to_string(), processes, id);
         for process in procs {
             process.stop(self);
         }
     }
 
     pub fn restart(&mut self, processes: &mut Vec<Process>, id: String) {
-        let procs = self.get_processes_by_task_and_id(processes, id);
+        let procs = Self::get_processes_by_task_and_id(self.name.to_string(), processes, id);
         for process in procs {
             process.retries = 0;
             process.restart(self);

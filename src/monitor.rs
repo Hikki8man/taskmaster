@@ -81,14 +81,8 @@ impl Monitor {
 										process.status = Status::Fatal;
 									}
 								}
-								Status::Stopping => {
-									process.status = Status::Stopped;
-								}
-	
-								Status::Restarting => {
-									process.start(task);
-								}
-	
+								Status::Stopping => { process.status = Status::Stopped }
+								Status::Restarting => {	process.start(task) }
 								_ => {
 									match task.config.autorestart {
 										Autorestart::Always => {
@@ -128,16 +122,16 @@ impl Monitor {
 	fn receive_terminal_command(&mut self) {
 		match self.receiver.try_recv() {
 			Ok(msg) => {
-				// let task = self.tasks.get_mut(&msg.cmd_name);
 				let cmd: CommandName = msg.cmd_name;
 				let args: Vec<ProcessArg> = msg.args;
 				match cmd {
 					CommandName::START => {
 						for arg in args {
 							if let Some(task) = self.tasks.get_mut(arg.name.as_str()) {
+								println!("arg:{:?}", arg);
 								task.start(&mut self.processes, arg.id);
 							} else {
-								eprintln!("Process not found");
+								eprintln!("Task {} not found", arg.name);
 							}
 						}
 					}
@@ -146,7 +140,7 @@ impl Monitor {
 							if let Some(task) = self.tasks.get_mut(arg.name.as_str()) {
 								task.stop(&mut self.processes, arg.id);
 							} else {
-								eprintln!("Process not found");
+								eprintln!("Task {} not found", arg.name);
 							}
 						}
 					}
@@ -155,7 +149,7 @@ impl Monitor {
 							if let Some(task) = self.tasks.get_mut(arg.name.as_str()) {
 								task.restart(&mut self.processes, arg.id);
 							} else {
-								eprintln!("Process not found");
+								eprintln!("Task {} not found", arg.name);
 							}
 						}
 					}
@@ -166,7 +160,7 @@ impl Monitor {
 						println!("Shutting down . . .");
 						self.shutdown = true;
 						for (_, task) in &mut self.tasks {
-							task.stop(&mut self.processes, String::from("*"));
+							task.stop(&mut self.processes, "*".to_string());
 						}
 					}
 				}
