@@ -1,5 +1,5 @@
-use std::{process::{Child, Command}, time::Instant, fmt::Octal};
-use libc::{self, mode_t, S_IRUSR, S_IWUSR, umask};
+use std::{process::{Child, Command}, time::Instant};
+use libc::{self, mode_t, umask};
 use crate::{task_utils::sigtype_to_string, task::Task};
 
 #[derive(Debug, PartialEq, Clone)]

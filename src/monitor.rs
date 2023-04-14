@@ -26,8 +26,8 @@ impl Monitor {
 	pub fn new(processes: Vec<Process>, tasks: HashMap<String, Task>, receiver: Receiver<TermInput>, config_path: String) -> Monitor {
 		// self::reload = Arc::new(AtomicBool::new(false));
 		unsafe { signal(SIGHUP, Self::handle_sighup_signal as usize)};
-		let monitor = Monitor { processes, tasks, receiver, config_path, shutdown: false };
-		monitor.print_processes();
+		let mut monitor = Monitor { processes, tasks, receiver, config_path, shutdown: false };
+		monitor.print_status(vec![]);
 		return monitor;
 	}
 
@@ -154,7 +154,7 @@ impl Monitor {
 						}
 					}
 					CommandName::STATUS => {
-						self.print_processes();
+						self.print_status(args);
 					}
 					CommandName::SHUTDOWN => {
 						println!("Shutting down . . .");
@@ -173,41 +173,23 @@ impl Monitor {
 		self.processes.iter().filter(|p| p.status != Status::Stopped && p.status != Status::Fatal).count()
 	}
 
-	pub fn print_processes(&self) {
+	pub fn print_status(&mut self, args: Vec<ProcessArg>) {
 		println!("[Task Name]\t-\t[Status]\t-\t[Info]\t-\t[Uptime]");
 		println!("------------------------------------------------------------------------");
-		for process in &self.processes {
-			let task = self.tasks.get(&process.task_name).unwrap();
-			let status = match &process.status {
-				Status::Running => "\x1B[32mRunning\x1B[0m",
-				Status::Stopping => "\x1B[31mStopping\x1B[0m",
-				Status::Stopped => "\x1b[30mStopped\x1B[0m",
-				Status::Restarting => "\x1B[33mRestarting\x1B[0m",
-				Status::Fatal => "\x1B[31mFatal\x1B[0m",
-				_ => "\x1B[33mStarting\x1B[0m",
-			};
-			let format = if self.processes.len() > 1 { format!("{}:{}", process.task_name, process.id) }
-				else { process.task_name.clone() };
-			if let Some(err) = &task.error {
-				print_process!(format, status, err);
+		if args.is_empty() {
+			for (_name, task) in &mut self.tasks {
+				task.print_processes(&mut self.processes, "*".to_string());
 			}
-			else if let Some(child) = &process.child {
-				let uptime = process.uptime.elapsed();
-				let uptime_formatted = format!(
-					"{:02}:{:02}:{:02}", 
-					uptime.as_secs() / 3600, 
-					(uptime.as_secs() / 60) % 60, 
-					uptime.as_secs() % 60
-				);
-				if process.status == Status::Running {
-					print_process!(format, status, child.id(), uptime_formatted);
+		} else {
+			for arg in args {
+				if let Some(task) = self.tasks.get_mut(arg.name.as_str()) {
+					task.print_processes(&mut self.processes, arg.id);
 				} else {
-					print_process!(format, status, child.id());
+					eprintln!("Task {} not found", arg.name);
 				}
-			} else {
-				print_process!(format, status);
 			}
 		}
+		println!("------------------------------------------------------------------------");
 	}
 	
 }

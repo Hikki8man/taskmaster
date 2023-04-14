@@ -8,7 +8,7 @@ use process::Process;
 use task::Task;
 use task_utils::{print_config};
 use task_utils::Config;
-use std::collections::{HashMap, BTreeMap};
+use std::collections::{HashMap, BTreeMap, VecDeque};
 use std::fs::OpenOptions;
 use std::path::PathBuf;
 use std::{fs::File, process::exit};
@@ -42,12 +42,12 @@ fn create_task_and_processes(config: BTreeMap<String, Config>) -> (HashMap<Strin
 
 	for(name, config) in config {
 
-        let mut cmd_splited: Vec<&str> = config.cmd.split_whitespace().collect();
+        let mut cmd_splited: VecDeque<&str> = config.cmd.split_whitespace().collect();
 		if cmd_splited.is_empty() {
 			continue; //Todo check supervisor
 		}
         let cmd_str = cmd_splited[0];
-		cmd_splited.remove(0);
+		cmd_splited.pop_front();
         let mut cmd = Command::new(cmd_str);
 		
 		if let Some(env) = &config.env {
