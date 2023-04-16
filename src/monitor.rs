@@ -3,7 +3,7 @@ use std::{collections::HashMap, sync::{mpsc::Receiver, Arc, atomic::{AtomicBool,
 use libc::{SIGHUP, signal};
 pub static RELOAD: AtomicBool = AtomicBool::new(false);
 
-use crate::{process::{Process, Status, self}, task::{Task, self}, task_utils::{Autorestart}, terminal::TermInput, print_process};
+use crate::{process::{Process, Status, self}, task::{Task, self}, task_utils::{Autorestart}, terminal::{TermInput, ProcessArg}, print_process};
 
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub enum CommandName {
@@ -26,8 +26,8 @@ impl Monitor {
 	pub fn new(processes: Vec<Process>, tasks: HashMap<String, Task>, receiver: Receiver<TermInput>, config_path: String) -> Monitor {
 		// self::reload = Arc::new(AtomicBool::new(false));
 		unsafe { signal(SIGHUP, Self::handle_sighup_signal as usize)};
-		let monitor = Monitor { processes, tasks, receiver, config_path, shutdown: false };
-		monitor.print_processes();
+		let mut monitor = Monitor { processes, tasks, receiver, config_path, shutdown: false };
+		monitor.print_status(vec![]);
 		return monitor;
 	}
 
@@ -81,14 +81,8 @@ impl Monitor {
 										process.status = Status::Fatal;
 									}
 								}
-								Status::Stopping => {
-									process.status = Status::Stopped;
-								}
-	
-								Status::Restarting => {
-									process.start(task);
-								}
-	
+								Status::Stopping => { process.status = Status::Stopped }
+								Status::Restarting => {	process.start(task) }
 								_ => {
 									match task.config.autorestart {
 										Autorestart::Always => {
@@ -128,37 +122,45 @@ impl Monitor {
 	fn receive_terminal_command(&mut self) {
 		match self.receiver.try_recv() {
 			Ok(msg) => {
-				let task = self.tasks.get_mut(&msg.arg);
-				match msg.name {
+				let cmd: CommandName = msg.cmd_name;
+				let args: Vec<ProcessArg> = msg.args;
+				match cmd {
 					CommandName::START => {
-						if let Some(task) = task {
-							task.start(&mut self.processes);
-						} else {
-							println!("Task not found");
+						for arg in args {
+							if let Some(task) = self.tasks.get_mut(arg.name.as_str()) {
+								println!("arg:{:?}", arg);
+								task.start(&mut self.processes, arg.id);
+							} else {
+								eprintln!("Task {} not found", arg.name);
+							}
 						}
 					}
 					CommandName::STOP => {
-						if let Some(task) = task {
-							task.stop(&mut self.processes);
-						} else {
-							println!("Task not found");
+						for arg in args {
+							if let Some(task) = self.tasks.get_mut(arg.name.as_str()) {
+								task.stop(&mut self.processes, arg.id);
+							} else {
+								eprintln!("Task {} not found", arg.name);
+							}
 						}
 					}
 					CommandName::RESTART => {
-						if let Some(task) = task {
-							task.restart(&mut self.processes);
-						} else {
-							println!("Task not found");
+						for arg in args {
+							if let Some(task) = self.tasks.get_mut(arg.name.as_str()) {
+								task.restart(&mut self.processes, arg.id);
+							} else {
+								eprintln!("Task {} not found", arg.name);
+							}
 						}
 					}
 					CommandName::STATUS => {
-						self.print_processes();
+						self.print_status(args);
 					}
 					CommandName::SHUTDOWN => {
 						println!("Shutting down . . .");
 						self.shutdown = true;
 						for (_, task) in &mut self.tasks {
-							task.stop(&mut self.processes);
+							task.stop(&mut self.processes, "*".to_string());
 						}
 					}
 				}
@@ -171,30 +173,23 @@ impl Monitor {
 		self.processes.iter().filter(|p| p.status != Status::Stopped && p.status != Status::Fatal).count()
 	}
 
-	pub fn print_processes(&self) {
-		println!("[Task Name]\t-\t[Status]\t-\t[PID]");
-		println!("------------------------------------------------------");
-		for process in &self.processes {
-			let task = self.tasks.get(&process.task_name).unwrap();
-			let status = match &process.status {
-				Status::Running => "\x1B[32mRunning\x1B[0m",
-				Status::Stopping => "\x1B[31mStopping\x1B[0m",
-				Status::Stopped => "\x1b[30mStopped\x1B[0m",
-				Status::Restarting => "\x1B[33mRestarting\x1B[0m",
-				Status::Fatal => "\x1B[31mFatal\x1B[0m",
-				_ => "\x1B[33mStarting\x1B[0m",
-			};
-			let format = if self.processes.len() > 1 { format!("{}:{}", process.task_name, process.id) }
-				else { process.task_name.clone() };
-			if let Some(err) = &task.error {
-				print_process!(format, status, err);
+	pub fn print_status(&mut self, args: Vec<ProcessArg>) {
+		println!("[Task Name]\t-\t[Status]\t-\t[Info]\t-\t[Uptime]");
+		println!("------------------------------------------------------------------------");
+		if args.is_empty() {
+			for (_name, task) in &mut self.tasks {
+				task.print_processes(&mut self.processes, "*".to_string());
 			}
-			else if let Some(child) = &process.child {
-				print_process!(format, status, child.id());
-			} else {
-				print_process!(format, status);
+		} else {
+			for arg in args {
+				if let Some(task) = self.tasks.get_mut(arg.name.as_str()) {
+					task.print_processes(&mut self.processes, arg.id);
+				} else {
+					eprintln!("Task {} not found", arg.name);
+				}
 			}
 		}
+		println!("------------------------------------------------------------------------");
 	}
 	
 }

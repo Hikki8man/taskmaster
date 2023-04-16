@@ -8,7 +8,7 @@ use process::Process;
 use task::Task;
 use task_utils::{print_config};
 use task_utils::Config;
-use std::collections::{HashMap, BTreeMap};
+use std::collections::{HashMap, BTreeMap, VecDeque};
 use std::fs::OpenOptions;
 use std::path::PathBuf;
 use std::{fs::File, process::exit};
@@ -36,21 +36,24 @@ fn set_cmd_output(path: &Option<String>) -> io::Result<File> {
 	}
 }
 
-fn set_task_and_processes(config: BTreeMap<String, Config>) -> (HashMap<String, Task>, Vec<Process>) {
+fn create_task_and_processes(config: BTreeMap<String, Config>) -> (HashMap<String, Task>, Vec<Process>) {
 	let mut tasks: HashMap<String, Task> = HashMap::new();
 	let mut processes: Vec<Process> = vec![];
-	let mut id = 0;
 
 	for(name, config) in config {
 
-        let mut vec = config.cmd.split_whitespace();
-        let cmd_str = vec.next().expect("msg");
+        let mut cmd_splited: VecDeque<&str> = config.cmd.split_whitespace().collect();
+		if cmd_splited.is_empty() {
+			continue; //Todo check supervisor
+		}
+        let cmd_str = cmd_splited[0];
+		cmd_splited.pop_front();
         let mut cmd = Command::new(cmd_str);
 		
 		if let Some(env) = &config.env {
 			cmd.envs(env);
 		}
-        cmd.args(vec);
+        cmd.args(cmd_splited);
         cmd.current_dir(config.workingdir.as_str());
 
         let mut task = Task::new(config, cmd, name.clone());
@@ -64,9 +67,8 @@ fn set_task_and_processes(config: BTreeMap<String, Config>) -> (HashMap<String, 
 			Err(e) => task.error = Some(Box::new(e))
 		}
 
-        for _ in 0..task.config.numprocs {
+        for id in 0..task.config.numprocs {
 			let mut process = Process::new(id, name.clone());
-            id += 1;
             if task.config.autostart {
                 process.start(&mut task);
             }
@@ -127,7 +129,7 @@ fn main() {
 	}
 
     let (sender, receiver): (Sender<TermInput>, Receiver<TermInput>) = mpsc::channel();
-	let (tasks, processes) = set_task_and_processes(config);
+	let (tasks, processes) = create_task_and_processes(config);
 
     let mut monitor = Monitor::new(processes, tasks, receiver, String::from("tasks.yaml")); //Todo: Get real path
     let _th = thread::spawn(move || {

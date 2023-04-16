@@ -14,12 +14,24 @@ const RIGHT: &'static str = "[C";
 const UP: &'static str = "[A";
 const DOWN: &'static str = "[B";
 
-#[derive(Clone, Debug)]
+
 pub struct TermInput {
-	pub name: CommandName,
-	pub arg: String,
+	pub cmd_name: CommandName,
+	pub args: Vec<ProcessArg>
+	// pub task_arg: (String, String),
 }
 
+impl TermInput {
+	pub fn new(cmd_name: CommandName, args: Vec<ProcessArg>) -> TermInput {
+		TermInput { cmd_name, args }
+	}
+}
+
+#[derive(Clone, Debug)]
+pub struct ProcessArg {
+	pub name: String,
+	pub id: String,
+}
 
 pub struct Terminal {
 	sender: Sender<TermInput>,
@@ -219,53 +231,82 @@ impl Terminal {
 		println!("Command is missing task name. Here is an example of a command:");
 		println!("{} [name of the task]", cmd_name);
 	}
+
+	fn get_task_and_arg(str: &str) -> ProcessArg {
+		let args_splited: Vec<&str> = str.splitn(2, ":").collect();
+		let name = String::from(args_splited[0]);
+		let id = String::from(
+			if let Some(id) = args_splited.get(1) {
+				if id.is_empty() {
+					"*"
+				} else {
+					id
+				}
+			} else {
+				"*"
+			});
+		ProcessArg { name, id }
+	}
+
+	fn parse_args(input: &Vec<&str>) -> (Option<String>, Vec<ProcessArg>) {
+		let mut i = 0;
+		let mut cmd: Option<String> = None;
+		let mut args: Vec<ProcessArg> = vec![];
+		while i < input.len() {
+			if i == 0 {
+				cmd = Some(input[i].to_string());
+			} else {
+				args.push(Self::get_task_and_arg(input[i]));
+			}
+			i += 1;
+		}
+		(cmd, args)
+	}
 	
 	fn check_input(input: String, sender: &Sender<TermInput>) {
-		let input_vec: Vec<&str> = input.split_whitespace().collect();
-		if input_vec.is_empty() {
+		let input: Vec<&str> = input.split_whitespace().collect();
+		if input.is_empty() {
 			return;
 		}
-		match input_vec[0] {
-			"start" => {
-				if input_vec.len() > 1 {
-					let msg: TermInput = TermInput { name: CommandName::START, arg: String::from(input_vec[1]) };
-					sender.send(msg).expect("msg");
-				} else {
-					Self::task_missing(input_vec[0])
+
+		let (cmd, args) = Self::parse_args(&input);
+		// println!("Args: {:?}", args);
+		if let Some(cmd) = cmd {
+			match cmd.as_str() {
+				"start" => {
+					if args.is_empty() {
+						return Self::task_missing(&cmd);
+					}
+					sender.send(TermInput::new(CommandName::START, args)).ok();
 				}
-			}
-			"stop" => {
-				if input_vec.len() > 1 {
-					let msg: TermInput = TermInput { name: CommandName::STOP, arg: String::from(input_vec[1]) };
-					sender.send(msg).expect("msg");
-				} else {
-					Self::task_missing(input_vec[0])
+				"stop" => {
+					if args.is_empty() {
+						return Self::task_missing(&cmd);
+					}
+					sender.send(TermInput::new(CommandName::STOP, args)).ok();
 				}
-			}
-			"restart" => {
-				if input_vec.len() > 1 {
-					let msg: TermInput = TermInput { name: CommandName::RESTART, arg: String::from(input_vec[1]) };
-					sender.send(msg).expect("msg");
-				} else {
-					Self::task_missing(input_vec[0])
+				"restart" => {
+					if args.is_empty() {
+						return Self::task_missing(&cmd);
+					}
+					sender.send(TermInput::new(CommandName::RESTART, args)).ok();
 				}
-			}
-			"status" => {
-				let msg: TermInput = TermInput { name: CommandName::STATUS, arg: String::from("") };
-				sender.send(msg).expect("msg");
-			}
-			"help" => {
-				println!("Here are the command you can use:");
-				println!("===================================");
-				println!("start    stop    restart    status");
-			}
-			"shutdown" => {
-				let msg: TermInput = TermInput { name: CommandName::SHUTDOWN, arg: String::from("") };
-				sender.send(msg).expect("msg");
-			}
-			_ => {
-				println!("Command not found");
-				println!("Type 'help' to see commands available");
+				"status" => {
+					sender.send(TermInput::new(CommandName::STATUS, args)).ok();
+				}
+				"help" => {
+					println!("Here are the command you can use:");
+					println!("===================================");
+					println!("start    stop    restart    status");
+				}
+				"shutdown" => {
+					sender.send(TermInput::new(CommandName::SHUTDOWN, args)).ok();
+				}
+				_ => {
+					println!("Command not found");
+					println!("Type 'help' to see commands available");
+				}
+
 			}
 		}
 	}

@@ -1,5 +1,5 @@
-use std::{process::{Child, Command}, time::Instant, fmt::Octal};
-use libc::{self, mode_t, S_IRUSR, S_IWUSR, umask};
+use std::{process::{Child, Command}, time::Instant};
+use libc::{self, mode_t, umask};
 use crate::{task_utils::sigtype_to_string, task::Task};
 
 #[derive(Debug, PartialEq, Clone)]
@@ -62,6 +62,7 @@ impl Process {
             let mut kill_cmd = Command::new("kill");
             match kill_cmd.args(["-s", sigtype_to_string(&task.config.stopsignal), child.id().to_string().as_str()]).output() {
                 Ok(_) => {
+                    //TODO check if supervisor restrain stop if already stopping
                     self.timer = Instant::now();
                     self.status = Status::Stopping;
                 }
@@ -77,7 +78,6 @@ impl Process {
 
     pub fn kill(&mut self) {
         if let Some(child) = &mut self.child {
-            println!("KILLLL");
             match child.kill() {
                 Ok(_) => {
                     self.child = None;
