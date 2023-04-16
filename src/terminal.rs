@@ -18,7 +18,6 @@ const DOWN: &'static str = "[B";
 pub struct TermInput {
 	pub cmd_name: CommandName,
 	pub args: Vec<ProcessArg>
-	// pub task_arg: (String, String),
 }
 
 impl TermInput {

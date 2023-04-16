@@ -1,63 +1,52 @@
-use std::{process::Command, error::Error};
+use std::{vec};
 
-use crate::{task_utils::Config, process::{Process, Status}, terminal::ProcessArg, print_process};
+use crate::{task_utils::{Config, Autorestart}, process::{Process, Status}, print_process};
 
 #[derive(Debug)]
 pub struct Task {
     pub name: String,
+    pub processes: Vec<Process>,
     pub config: Config,
-    pub cmd: Command,
-    pub error: Option<Box<dyn Error>>,
 }
 
 impl Task {
-    pub fn new(config: Config, cmd: Command, name: String) -> Task {
-        Task { config, cmd, name, error: None }
+    pub fn new(config: Config, name: String) -> Task {
+        Task { config, name, processes: vec![] }
     }
 
-    pub fn get_processes_by_task_and_id(task_name: String, processes: &mut Vec<Process>, id: String) -> Vec<&mut Process> { 
-        let procs: Vec<&mut Process> = if id == "*" {
-            processes.iter_mut()
-                .filter(|e| e.task_name == task_name)
-                .collect()
-        } else {
-            processes.iter_mut()
-                .filter(|e| e.task_name == task_name && e.id.to_string() == id)
-                .collect()
-        };
-        match procs.is_empty() {
-            true if id == "*" => eprintln!("No processes found for task {}", task_name),
-            true => eprintln!("Process {}:{} not found", task_name, id),
-            false => {},
-        }
-        procs
-    }
+    // fn get_procs_by_id(&mut self, id: String) -> impl Iterator<Item = &mut Process> {
+    //     self.processes.iter_mut().filter(move |e| e.id.to_string() == id || matches!(id.as_str(), "*"))
+    // }
     
-    pub fn start(&mut self, processes: &mut Vec<Process>, id: String) {
-       let procs = Self::get_processes_by_task_and_id(self.name.to_string(), processes, id.to_string());
+    pub fn start(&mut self, id: String) {
+       let procs = self.processes.iter_mut().filter(|e| e.id.to_string() == id || id == "*");
         for process in procs {
             process.retries = 0;
-            process.start(self);
+            process.start();
         }
     }
 
-    pub fn stop(&mut self, processes: &mut Vec<Process>, id: String) {
-        let procs = Self::get_processes_by_task_and_id(self.name.to_string(), processes, id);
+    pub fn stop(&mut self, id: String) {
+        let procs = self.processes.iter_mut().filter(|e| e.id.to_string() == id || id == "*");
         for process in procs {
-            process.stop(self);
+            process.stop(&self.config.stopsignal);
         }
     }
 
-    pub fn restart(&mut self, processes: &mut Vec<Process>, id: String) {
-        let procs = Self::get_processes_by_task_and_id(self.name.to_string(), processes, id);
+    pub fn restart(&mut self, id: String) {
+        let procs = self.processes.iter_mut().filter(|e| e.id.to_string() == id || id == "*");
         for process in procs {
             process.retries = 0;
-            process.restart(self);
+            process.restart(&self.config.stopsignal);
         }
     }
 
-    pub fn print_processes(&mut self, processes: &mut Vec<Process>, id: String) {
-	    let procs = Task::get_processes_by_task_and_id(self.name.to_string(), processes, id);
+    pub fn print_processes(&mut self, id: String) {
+	    let procs: Vec<&mut Process> = self.processes.iter_mut().filter(|e| e.id.to_string() == id || id == "*").collect();
+        if procs.is_empty() {
+            //TODO id == *
+            return eprintln!("Process {}:{} not found", self.name, id);
+        }
         for proc in procs {
             let status = match proc.status {
                 Status::Running => "\x1B[32mRunning\x1B[0m",
@@ -69,7 +58,7 @@ impl Task {
             };
             let format = if self.config.numprocs > 1 { format!("{}:{}", self.name, proc.id) }
                 else { self.name.clone() };
-            if let Some(err) = &self.error {
+            if let Some(err) = &proc.error {
                 print_process!(format, status, err);
             }
             else if let Some(child) = &proc.child {
@@ -91,4 +80,47 @@ impl Task {
 
         }
 	}
+
+    pub fn try_wait(&mut self) {
+        for process in self.processes.iter_mut() {
+            if let Some(child) = &mut process.child {
+                match child.try_wait() {
+                    Ok(Some(status)) => {
+                        println!("exit status: {:?}, Process status: {:?}", status.code(), process.status);
+                        process.child = None;
+                        match process.status {
+                            Status::Starting => {
+                                if process.retries < self.config.startretries {
+                                    process.start();
+                                } else {
+                                    process.status = Status::Fatal;
+                                }
+                            }
+                            Status::Stopping => { process.status = Status::Stopped }
+                            Status::Restarting => {	process.start(); }
+                            _ => {
+                                match self.config.autorestart {
+                                    Autorestart::Always => {
+                                        process.start();
+                                    }
+                                    Autorestart::Unexpected => {
+                                        if status.code().is_none() || !self.config.exitcodes.contains(&status.code().unwrap_or(0)) {
+                                            process.start();
+                                        } else {
+                                            process.status = Status::Stopped;
+                                        }
+                                    }
+                                    Autorestart::Never => { process.status = Status::Stopped }
+                                }
+                            }
+                        }
+                    }
+                    Ok(None) => {
+                        process.check_process_state(&self.config);
+                    }
+                    Err(e) => println!("error attempting to wait: {}", e),
+                }
+            }
+        }
+    }
 }
