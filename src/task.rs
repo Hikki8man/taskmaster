@@ -19,7 +19,12 @@ impl Task {
     // }
     
     pub fn start(&mut self, id: String) {
-       let procs = self.processes.iter_mut().filter(|e| e.id.to_string() == id || id == "*");
+        let procs: Vec<&mut Process> = self.processes.iter_mut().filter(|e| e.id.to_string() == id || id == "*").collect();
+        match procs.is_empty() {
+            true if id == "*" => eprintln!("No processes found for task {}", self.name),
+            true =>  eprintln!("Process {}:{} not found", self.name, id),
+            false => {},
+        }
         for process in procs {
             process.retries = 0;
             process.start();
@@ -27,14 +32,24 @@ impl Task {
     }
 
     pub fn stop(&mut self, id: String) {
-        let procs = self.processes.iter_mut().filter(|e| e.id.to_string() == id || id == "*");
+        let procs: Vec<&mut Process> = self.processes.iter_mut().filter(|e| e.id.to_string() == id || id == "*").collect();
+        match procs.is_empty() {
+            true if id == "*" => eprintln!("No processes found for task {}", self.name),
+            true =>  eprintln!("Process {}:{} not found", self.name, id),
+            false => {},
+        }
         for process in procs {
             process.stop(&self.config.stopsignal);
         }
     }
 
     pub fn restart(&mut self, id: String) {
-        let procs = self.processes.iter_mut().filter(|e| e.id.to_string() == id || id == "*");
+        let procs: Vec<&mut Process> = self.processes.iter_mut().filter(|e| e.id.to_string() == id || id == "*").collect();
+        match procs.is_empty() {
+            true if id == "*" => eprintln!("No processes found for task {}", self.name),
+            true =>  eprintln!("Process {}:{} not found", self.name, id),
+            false => {},
+        }
         for process in procs {
             process.retries = 0;
             process.restart(&self.config.stopsignal);
@@ -43,9 +58,10 @@ impl Task {
 
     pub fn print_processes(&mut self, id: String) {
 	    let procs: Vec<&mut Process> = self.processes.iter_mut().filter(|e| e.id.to_string() == id || id == "*").collect();
-        if procs.is_empty() {
-            //TODO id == *
-            return eprintln!("Process {}:{} not found", self.name, id);
+        match procs.is_empty() {
+            true if id == "*" => eprintln!("No processes found for task {}", self.name),
+            true =>  eprintln!("Process {}:{} not found", self.name, id),
+            false => {},
         }
         for proc in procs {
             let status = match proc.status {

@@ -1,9 +1,9 @@
 loop:
-  cmd: "bash test.sh"
+  cmd: bash test.sh
   numprocs: 3
-  umask: 022
+  # umask: 022
   workingdir: "."
-  autostart: true
+  autostart: false
   autorestart: unexpected
   exitcodes:
     - 0

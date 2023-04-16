@@ -68,23 +68,24 @@ fn create_task_and_processes(config: BTreeMap<String, Config>) -> HashMap<String
 	for(name, config) in config {
 		
 		let mut task = Task::new(config, name.clone());
-		let mut cmd_splited: VecDeque<&str> = task.config.cmd.split_whitespace().collect();
-		if cmd_splited.is_empty() {
-			//FATAL     command is empty
-			continue; //Todo
-		}
-        let cmd_str = cmd_splited[0];
-		cmd_splited.pop_front();
+		let cmd_split: VecDeque<&str> = task.config.cmd.split_whitespace().collect();
 		
 		for id in 0..task.config.numprocs {
-       		let mut cmd = Command::new(cmd_str);
+			let mut error: Option<Box<dyn Error>> = None;
+			let mut cmd_splited = cmd_split.clone();
+			let mut cmd = match cmd_splited.pop_front() {
+				Some(cmd_str) => Command::new(cmd_str),
+				None => {
+					error = Some(Box::new(io::Error::new(io::ErrorKind::Other, "Command is empty")));
+					Command::new("")
+				}
+			};
 			if let Some(env) = &task.config.env {
 				cmd.envs(env);
 			}
 			cmd.args(cmd_splited.clone());
 			cmd.current_dir(task.config.workingdir.as_str());
 
-			let mut error: Option<Box<dyn Error>> = None;
 			if let Err(e) = set_cmd_output(&mut cmd, &task.config.stdout, true) {
 				error = Some(Box::new(e));
 			}
