@@ -215,6 +215,7 @@ impl Terminal {
 			String::from("start"),
 			String::from("stop"),
 			String::from("shutdown"),
+			String::from("update"),
 			String::from("restart"),
 			String::from("help"),
 		];
@@ -292,6 +293,9 @@ impl Terminal {
 				}
 				"status" => {
 					sender.send(TermInput::new(CommandName::STATUS, args)).ok();
+				}
+				"update" => {
+					sender.send(TermInput::new(CommandName::UPDATE, args)).ok();
 				}
 				"help" => {
 					println!("Here are the command you can use:");

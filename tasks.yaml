@@ -1,6 +1,6 @@
 loop:
   cmd: bash test.sh
-  numprocs: 3
+  numprocs: 2
   # umask: 022
   workingdir: "."
   autostart: false

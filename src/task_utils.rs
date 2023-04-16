@@ -17,7 +17,7 @@ macro_rules! print_process {
 	};
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum Autorestart {
 	Always,
@@ -25,7 +25,7 @@ pub enum Autorestart {
 	Never,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub enum Sigtype {
 	HUP,
 	INT,
@@ -96,7 +96,7 @@ pub fn sigtype_to_string(sigtype: &Sigtype) -> &'static str {
 	}
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
 	pub cmd: String,

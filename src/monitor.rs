@@ -1,15 +1,16 @@
-use std::{collections::HashMap, sync::{mpsc::Receiver, Arc, atomic::{AtomicBool, Ordering}}, process::{exit}};
+use std::{collections::{HashMap, BTreeMap}, sync::{mpsc::Receiver, Arc, atomic::{AtomicBool, Ordering}}, process::{exit}, fs::{OpenOptions, File}, error::Error, io::Read, path::PathBuf};
 
 use libc::{SIGHUP, signal};
 pub static RELOAD: AtomicBool = AtomicBool::new(false);
 
-use crate::{process::{Status}, task::{Task}, terminal::{TermInput, ProcessArg}};
+use crate::{process::{Status}, task::{Task}, terminal::{TermInput, ProcessArg}, task_utils::Config, parse_config_file};
 
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub enum CommandName {
 	START,
 	STOP,
     RESTART,
+	UPDATE,
     STATUS,
 	SHUTDOWN,
 }
@@ -17,12 +18,12 @@ pub enum CommandName {
 pub struct Monitor {
 	tasks: HashMap<String, Task>,
 	receiver: Receiver<TermInput>,
-	config_path: String,
+	config_path: PathBuf,
 	shutdown: bool,
 }
 
 impl Monitor {
-	pub fn new(tasks: HashMap<String, Task>, receiver: Receiver<TermInput>, config_path: String) -> Monitor {
+	pub fn new(tasks: HashMap<String, Task>, receiver: Receiver<TermInput>, config_path: PathBuf) -> Monitor {
 		// self::reload = Arc::new(AtomicBool::new(false));
 		unsafe { signal(SIGHUP, Self::handle_sighup_signal as usize)};
 		let mut monitor = Monitor { tasks, receiver, config_path, shutdown: false };
@@ -86,6 +87,12 @@ impl Monitor {
 					CommandName::STATUS => {
 						self.print_status(args);
 					}
+					CommandName::UPDATE => {
+						match self.update() {
+							Ok(()) => {},
+							Err(e) => { eprintln!("{:?}", e) }
+						}
+					}
 					CommandName::SHUTDOWN => {
 						println!("Shutting down . . .");
 						self.shutdown = true;
@@ -105,6 +112,20 @@ impl Monitor {
 				p.status != Status::Stopped && p.status != Status::Fatal
 			})
 		})
+	}
+
+	fn update(&mut self) -> Result<(), Box<dyn Error>> {
+		let configs: BTreeMap<String, Config> = parse_config_file(&self.config_path)?;
+		for (name, task) in &mut self.tasks {
+			if let Some(config) = configs.get(name) {
+				if task.config != *config {
+					println!("diff");
+				} else {
+					println!("no diff");
+				}
+			}
+		}
+		Ok(())
 	}
 
 	pub fn print_status(&mut self, args: Vec<ProcessArg>) {

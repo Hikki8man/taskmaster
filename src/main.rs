@@ -30,10 +30,18 @@ macro_rules! print_exit {
 	};
 }
 
+pub fn parse_config_file(path: &PathBuf) -> Result<BTreeMap<String, Config>, Box<dyn Error>> {
+	let mut file = File::open(path)?;
+	let mut content = String::new();
+	file.read_to_string(&mut content)?;
+	let configs: BTreeMap<String, Config> = serde_yaml::from_str(&content)?;
+	Ok(configs)
+}
+
 //pabo
 fn set_cmd_output(cmd: &mut Command, path: &Option<String>, stdout: bool) -> Result<(), io::Error> {
 	if let Some(path) = path {
-		match OpenOptions::new().create(true).append(true).open(path) {
+		match OpenOptions::new().create(true).append(true).write(true).open(path) {
 			Ok(file) => {
 				if stdout {
 					cmd.stdout(file);
@@ -127,35 +135,28 @@ fn main() {
 	{
 		print_exit!("Wrong file extention. Expecting a YAML file.", 1);
 	}
-	if !path.try_exists().expect("Unable to check file existence.")
-	{
-		print_exit!("Invalid path.", 1);
-	}
-	if !path.is_file()
-	{
-		print_exit!("Not a file.", 1);
-	}
-	//TODO fix parsing
-	let mut file = File::open("tasks.yaml")
-		.expect("Could not open file...");
-	let mut content = String::new();
-	file.read_to_string(&mut content)
-		.expect("Could not read file...");
-		
-	let config: BTreeMap<String, Config>;
-	match serde_yaml::from_str(content.as_str()) {
-		Ok(results) => {
-			config = results;
-		},
-		Err(e) => {
-			print_exit!(format!("Configuration file error: {}", e), 1);
-		}
-	}
-
+	let config = match parse_config_file(&path) {
+		Ok(cfg) => cfg,
+		Err(e) => { print_exit!(e, 1); }
+	};
+	// if !path.try_exists().expect("Unable to check file existence.")
+	// {
+	// 	print_exit!("Invalid path.", 1);
+	// }
+	// if !path.is_file()
+	// {
+	// 	print_exit!("Not a file.", 1);
+	// }
+	// //TODO fix parsing
+	// let mut file = File::open("tasks.yaml")
+	// 	.expect("Could not open file...");
+	// let mut content = String::new();
+	// file.read_to_string(&mut content)
+	// 	.expect("Could not read file...");
     let (sender, receiver): (Sender<TermInput>, Receiver<TermInput>) = mpsc::channel();
 	let tasks = create_task_and_processes(config);
 
-    let mut monitor = Monitor::new(tasks, receiver, String::from("tasks.yaml")); //Todo: Get real path
+    let mut monitor = Monitor::new(tasks, receiver, path); //Todo: Get real path
     let _th = thread::spawn(move || {
 		let mut terminal: Terminal = Terminal::new(sender);
 		terminal.read_input();
