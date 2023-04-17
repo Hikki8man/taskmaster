@@ -69,11 +69,11 @@ fn set_cmd_output(cmd: &mut Command, path: &Option<String>, stdout: bool) -> Res
 	}
 }
 
-fn create_task_and_processes(config: BTreeMap<String, Config>) -> HashMap<String, Task> {
-	let mut tasks: HashMap<String, Task> = HashMap::new();
+fn create_task_and_processes(name: String, config: Config) -> (String, Task) {
+	// let mut tasks: HashMap<String, Task> = HashMap::new();
 	// let mut processes: Vec<Process> = vec![];
 	
-	for(name, config) in config {
+	// for(name, config) in config {
 		
 		let mut task = Task::new(config, name.clone());
 		let cmd_split: VecDeque<&str> = task.config.cmd.split_whitespace().collect();
@@ -107,9 +107,9 @@ fn create_task_and_processes(config: BTreeMap<String, Config>) -> HashMap<String
             }
             task.processes.push(process);
         }
-        tasks.insert(name, task);
-    }
-	tasks
+        // tasks.insert(name, task);
+    // }
+	(name, task)
 }
 
 fn main() {
@@ -139,6 +139,7 @@ fn main() {
 		Ok(cfg) => cfg,
 		Err(e) => { print_exit!(e, 1); }
 	};
+
 	// if !path.try_exists().expect("Unable to check file existence.")
 	// {
 	// 	print_exit!("Invalid path.", 1);
@@ -154,7 +155,11 @@ fn main() {
 	// file.read_to_string(&mut content)
 	// 	.expect("Could not read file...");
     let (sender, receiver): (Sender<TermInput>, Receiver<TermInput>) = mpsc::channel();
-	let tasks = create_task_and_processes(config);
+	let mut tasks: HashMap<String, Task> = HashMap::new();
+	for (name, config) in config {
+		let (name, task) = create_task_and_processes(name, config);
+		tasks.insert(name, task);
+	}
 
     let mut monitor = Monitor::new(tasks, receiver, path); //Todo: Get real path
     let _th = thread::spawn(move || {
