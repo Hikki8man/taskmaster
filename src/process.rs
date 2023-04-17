@@ -1,6 +1,6 @@
-use std::{process::{Child, Command}, time::Instant};
+use std::{process::{Child, Command}, time::{Instant, Duration}, error::Error};
 use libc::{self, mode_t, umask};
-use crate::{task_utils::sigtype_to_string, task::Task};
+use crate::{task_utils::{sigtype_to_string, Sigtype, Config}};
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Status {
@@ -15,40 +15,46 @@ pub enum Status {
 #[derive(Debug)]
 pub struct Process {
     pub id: u32,
-    pub task_name: String,
+    cmd: Command,
+    umask: u32,
+    task_name: String,
     pub child: Option<Child>,
     pub status: Status,
     pub retries: u32,
     pub timer: Instant,
     pub uptime: Instant,
+    pub error: Option<Box<dyn Error>>,
 }
 
 impl Process {
-    pub fn new(id: u32, task_name: String) -> Process {
+    pub fn new(id: u32, task_name: String, cmd: Command, umask: u32) -> Process {
         Process {
             id,
-            task_name,
+            cmd,
+            umask,
             child: None,
+            task_name,
             status: Status::Stopped,
             retries: 0,
             timer: Instant::now(),
             uptime: Instant::now(),
+            error: None
         }
     }
 
-    pub fn start(&mut self, task: &mut Task) {
+    pub fn start(&mut self) {
         if let Some(_child) = &self.child {
-            return println!("Process {} is already running", self.id);
+            return println!("Process {}:{} is already running", self.task_name, self.id);
         }
-        if task.error.is_none() {
-            let old_umask = self.set_umask(task.config.umask);
-            match task.cmd.spawn() {
+        if self.error.is_none() {
+            let old_umask = self.set_umask(self.umask);
+            match self.cmd.spawn() {
                 Ok(child) => {
                     self.status = Status::Starting;
                     self.timer = Instant::now();
                     self.child = Some(child);
                 }
-                Err(error) => {println!("error: {}", error)}// add option err in process to display in status ?
+                Err(error) => { self.error = Some(Box::new(error)) }
             }
             self.set_umask(old_umask);
         } else {
@@ -57,22 +63,22 @@ impl Process {
         self.retries += 1;
     }
 
-    pub fn stop(&mut self, task: &mut Task) {
+    pub fn stop(&mut self, signal: &Sigtype) {
         if let Some(child) = &self.child {
             let mut kill_cmd = Command::new("kill");
-            match kill_cmd.args(["-s", sigtype_to_string(&task.config.stopsignal), child.id().to_string().as_str()]).output() {
+            match kill_cmd.args(["-s", sigtype_to_string(&signal), child.id().to_string().as_str()]).output() {
                 Ok(_) => {
                     //TODO check if supervisor restrain stop if already stopping
                     self.timer = Instant::now();
                     self.status = Status::Stopping;
                 }
-                Err(e) => {println!("{}", e)}
+                Err(e) => { eprintln!("{}", e) }
             }
         }
     }
 
-    pub fn restart(&mut self, task: &mut Task) {
-        self.stop(task);
+    pub fn restart(&mut self, signal: &Sigtype) {
+        self.stop(signal);
         self.status = Status::Restarting;
     }
 
@@ -83,7 +89,7 @@ impl Process {
                     self.child = None;
                     self.status = Status::Stopped;
                 }
-                Err(e) => {println!("{}", e)}
+                Err(e) => { eprintln!("{}", e) }
             }
         }
     }
@@ -91,5 +97,31 @@ impl Process {
     fn set_umask(&self, new_umask: libc::mode_t) -> mode_t {
         let old_umask = unsafe { umask(new_umask) };
         old_umask
+    }
+
+    pub fn check_process_state(&mut self, config: &Config) {
+        match self.status {
+            Status::Starting => {
+                if self.timer.elapsed() > Duration::new(config.starttime as u64, 0) {
+                    self.retries = 0;
+                    self.status = Status::Running;
+                    self.uptime = Instant::now();
+                    println!("{}:{} is now running", self.task_name, self.id);
+                }
+            }
+            Status::Stopping => {
+                if self.timer.elapsed() > Duration::new(config.stoptime as u64, 0) {
+                    self.kill();
+                    println!("{}:{} is now stopped", self.task_name, self.id);
+                }
+            }
+            Status::Restarting => {
+                if self.timer.elapsed() > Duration::new(config.stoptime as u64, 0) {
+                    self.kill();
+                    self.start();
+                }
+            }
+            _ => {}
+        }
     }
 }

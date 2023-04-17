@@ -18,7 +18,6 @@ const DOWN: &'static str = "[B";
 pub struct TermInput {
 	pub cmd_name: CommandName,
 	pub args: Vec<ProcessArg>
-	// pub task_arg: (String, String),
 }
 
 impl TermInput {
@@ -216,6 +215,7 @@ impl Terminal {
 			String::from("start"),
 			String::from("stop"),
 			String::from("shutdown"),
+			String::from("update"),
 			String::from("restart"),
 			String::from("help"),
 		];
@@ -293,6 +293,9 @@ impl Terminal {
 				}
 				"status" => {
 					sender.send(TermInput::new(CommandName::STATUS, args)).ok();
+				}
+				"update" => {
+					sender.send(TermInput::new(CommandName::UPDATE, args)).ok();
 				}
 				"help" => {
 					println!("Here are the command you can use:");

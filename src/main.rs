@@ -9,6 +9,7 @@ use task::Task;
 use task_utils::{print_config};
 use task_utils::Config;
 use std::collections::{HashMap, BTreeMap, VecDeque};
+use std::error::Error;
 use std::fs::OpenOptions;
 use std::path::PathBuf;
 use std::{fs::File, process::exit};
@@ -17,7 +18,7 @@ use std::{env};
 use std::thread;
 use std::sync::mpsc::{Sender, Receiver};
 use std::sync::mpsc;
-use std::process::{Command};
+use std::process::{Command, Stdio};
 
 use crate::monitor::Monitor;
 use crate::terminal::{TermInput, Terminal};
@@ -29,55 +30,86 @@ macro_rules! print_exit {
 	};
 }
 
-fn set_cmd_output(path: &Option<String>) -> io::Result<File> {
-	match path {
-		Some(path) => OpenOptions::new().create(true).append(true).open(path),
-		None => OpenOptions::new().create(true).append(true).open("/dev/null"),
+pub fn parse_config_file(path: &PathBuf) -> Result<BTreeMap<String, Config>, Box<dyn Error>> {
+	let mut file = File::open(path)?;
+	let mut content = String::new();
+	file.read_to_string(&mut content)?;
+	let configs: BTreeMap<String, Config> = serde_yaml::from_str(&content)?;
+	Ok(configs)
+}
+
+//pabo
+fn set_cmd_output(cmd: &mut Command, path: &Option<String>, stdout: bool) -> Result<(), io::Error> {
+	if let Some(path) = path {
+		match OpenOptions::new().create(true).append(true).write(true).open(path) {
+			Ok(file) => {
+				if stdout {
+					cmd.stdout(file);
+				} else {
+					cmd.stderr(file);
+				}
+				Ok(())
+			}
+			Err(e) => {
+				if stdout {
+					cmd.stdout(Stdio::null());
+				} else {
+					cmd.stderr(Stdio::null());
+				}
+				Err(e)
+			}
+		}
+	} else {
+		if stdout {
+			cmd.stdout(Stdio::null());
+		} else {
+			cmd.stderr(Stdio::null());
+		}
+		Ok(())
 	}
 }
 
-fn create_task_and_processes(config: BTreeMap<String, Config>) -> (HashMap<String, Task>, Vec<Process>) {
+fn create_task_and_processes(config: BTreeMap<String, Config>) -> HashMap<String, Task> {
 	let mut tasks: HashMap<String, Task> = HashMap::new();
-	let mut processes: Vec<Process> = vec![];
-
+	// let mut processes: Vec<Process> = vec![];
+	
 	for(name, config) in config {
-
-        let mut cmd_splited: VecDeque<&str> = config.cmd.split_whitespace().collect();
-		if cmd_splited.is_empty() {
-			continue; //Todo check supervisor
-		}
-        let cmd_str = cmd_splited[0];
-		cmd_splited.pop_front();
-        let mut cmd = Command::new(cmd_str);
 		
-		if let Some(env) = &config.env {
-			cmd.envs(env);
-		}
-        cmd.args(cmd_splited);
-        cmd.current_dir(config.workingdir.as_str());
+		let mut task = Task::new(config, name.clone());
+		let cmd_split: VecDeque<&str> = task.config.cmd.split_whitespace().collect();
+		
+		for id in 0..task.config.numprocs {
+			let mut error: Option<Box<dyn Error>> = None;
+			let mut cmd_splited = cmd_split.clone();
+			let mut cmd = match cmd_splited.pop_front() {
+				Some(cmd_str) => Command::new(cmd_str),
+				None => {
+					error = Some(Box::new(io::Error::new(io::ErrorKind::Other, "Command is empty")));
+					Command::new("")
+				}
+			};
+			if let Some(env) = &task.config.env {
+				cmd.envs(env);
+			}
+			cmd.args(cmd_splited.clone());
+			cmd.current_dir(task.config.workingdir.as_str());
 
-        let mut task = Task::new(config, cmd, name.clone());
-        
-		match set_cmd_output(&task.config.stdout) {
-			Ok(stdout) => { task.cmd.stdout(stdout); }
-			Err(e) => task.error = Some(Box::new(e))
-		}
-		match set_cmd_output(&task.config.stderr) {
-			Ok(stderr) => { task.cmd.stderr(stderr); }
-			Err(e) => task.error = Some(Box::new(e))
-		}
-
-        for id in 0..task.config.numprocs {
-			let mut process = Process::new(id, name.clone());
+			if let Err(e) = set_cmd_output(&mut cmd, &task.config.stdout, true) {
+				error = Some(Box::new(e));
+			}
+			if let Err(e) = set_cmd_output(&mut cmd, &task.config.stdout, false) {
+				error = Some(Box::new(e));
+			}
+			let mut process = Process::new(id, name.clone(), cmd, task.config.umask);
+			process.error = error;
             if task.config.autostart {
-                process.start(&mut task);
+                process.start();
             }
-            processes.push(process);
+            task.processes.push(process);
         }
         tasks.insert(name, task);
     }
-
-	(tasks, processes)
+	tasks
 }
 
 fn main() {
@@ -103,35 +135,28 @@ fn main() {
 	{
 		print_exit!("Wrong file extention. Expecting a YAML file.", 1);
 	}
-	if !path.try_exists().expect("Unable to check file existence.")
-	{
-		print_exit!("Invalid path.", 1);
-	}
-	if !path.is_file()
-	{
-		print_exit!("Not a file.", 1);
-	}
-	//TODO fix parsing
-	let mut file = File::open("tasks.yaml")
-		.expect("Could not open file...");
-	let mut content = String::new();
-	file.read_to_string(&mut content)
-		.expect("Could not read file...");
-		
-	let config: BTreeMap<String, Config>;
-	match serde_yaml::from_str(content.as_str()) {
-		Ok(results) => {
-			config = results;
-		},
-		Err(e) => {
-			print_exit!(format!("Configuration file error: {}", e), 1);
-		}
-	}
-
+	let config = match parse_config_file(&path) {
+		Ok(cfg) => cfg,
+		Err(e) => { print_exit!(e, 1); }
+	};
+	// if !path.try_exists().expect("Unable to check file existence.")
+	// {
+	// 	print_exit!("Invalid path.", 1);
+	// }
+	// if !path.is_file()
+	// {
+	// 	print_exit!("Not a file.", 1);
+	// }
+	// //TODO fix parsing
+	// let mut file = File::open("tasks.yaml")
+	// 	.expect("Could not open file...");
+	// let mut content = String::new();
+	// file.read_to_string(&mut content)
+	// 	.expect("Could not read file...");
     let (sender, receiver): (Sender<TermInput>, Receiver<TermInput>) = mpsc::channel();
-	let (tasks, processes) = create_task_and_processes(config);
+	let tasks = create_task_and_processes(config);
 
-    let mut monitor = Monitor::new(processes, tasks, receiver, String::from("tasks.yaml")); //Todo: Get real path
+    let mut monitor = Monitor::new(tasks, receiver, path); //Todo: Get real path
     let _th = thread::spawn(move || {
 		let mut terminal: Terminal = Terminal::new(sender);
 		terminal.read_input();

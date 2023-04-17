@@ -1,32 +1,32 @@
-use std::{collections::HashMap, sync::{mpsc::Receiver, Arc, atomic::{AtomicBool, Ordering}}, time::{Duration, Instant}, process::{ExitStatus, exit}, os::unix::process::ExitStatusExt, ffi::c_int};
+use std::{collections::{HashMap, BTreeMap}, sync::{mpsc::Receiver, Arc, atomic::{AtomicBool, Ordering}}, process::{exit}, fs::{OpenOptions, File}, error::Error, io::Read, path::PathBuf};
 
 use libc::{SIGHUP, signal};
 pub static RELOAD: AtomicBool = AtomicBool::new(false);
 
-use crate::{process::{Process, Status, self}, task::{Task, self}, task_utils::{Autorestart}, terminal::{TermInput, ProcessArg}, print_process};
+use crate::{process::{Status}, task::{Task}, terminal::{TermInput, ProcessArg}, task_utils::Config, parse_config_file};
 
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub enum CommandName {
 	START,
 	STOP,
     RESTART,
+	UPDATE,
     STATUS,
 	SHUTDOWN,
 }
 
 pub struct Monitor {
-	processes: Vec<Process>,
 	tasks: HashMap<String, Task>,
 	receiver: Receiver<TermInput>,
-	config_path: String,
+	config_path: PathBuf,
 	shutdown: bool,
 }
 
 impl Monitor {
-	pub fn new(processes: Vec<Process>, tasks: HashMap<String, Task>, receiver: Receiver<TermInput>, config_path: String) -> Monitor {
+	pub fn new(tasks: HashMap<String, Task>, receiver: Receiver<TermInput>, config_path: PathBuf) -> Monitor {
 		// self::reload = Arc::new(AtomicBool::new(false));
 		unsafe { signal(SIGHUP, Self::handle_sighup_signal as usize)};
-		let mut monitor = Monitor { processes, tasks, receiver, config_path, shutdown: false };
+		let mut monitor = Monitor { tasks, receiver, config_path, shutdown: false };
 		monitor.print_status(vec![]);
 		return monitor;
 	}
@@ -35,85 +35,16 @@ impl Monitor {
 		RELOAD.store(true, Ordering::SeqCst);
 	}
 
-	fn check_state(process: &mut Process, task: &mut Task) {
-		match process.status {
-			Status::Starting => {
-				if process.timer.elapsed() > Duration::new(task.config.starttime as u64, 0) {
-					process.retries = 0;
-					process.status = Status::Running;
-					process.uptime = Instant::now();
-					println!("{}:{} is now running", process.task_name, process.id);
-				}
-			}
-			Status::Stopping => {
-				if process.timer.elapsed() > Duration::new(task.config.stoptime as u64, 0) {
-					process.kill();
-					println!("{}:{} is now stopped", process.task_name, process.id);
-				}
-			}
-			Status::Restarting => {
-				if process.timer.elapsed() > Duration::new(task.config.stoptime as u64, 0) {
-					process.kill();
-					process.start(task);
-				}
-			}
-			_ => {}
-		}
-	}
 	pub fn task_manager_loop(&mut self) {
 		loop {
 			if RELOAD.load(Ordering::SeqCst) == true {
 				RELOAD.store(false, Ordering::SeqCst);
 			}
-			for process in self.processes.iter_mut() {
-				let task = self.tasks.get_mut(process.task_name.as_str()).expect("lol");//Todo unwrapor and kill processes
-				
-				if let Some(child) = &mut process.child {
-					match child.try_wait() {
-						Ok(Some(status)) => {
-							println!("exit status: {:?}, Process status: {:?}", status.code(), process.status);
-							process.child = None;
-							match process.status {
-								Status::Starting => {
-									if process.retries < task.config.startretries {
-										process.start(task);
-									} else {
-										process.status = Status::Fatal;
-									}
-								}
-								Status::Stopping => { process.status = Status::Stopped }
-								Status::Restarting => {	process.start(task) }
-								_ => {
-									match task.config.autorestart {
-										Autorestart::Always => {
-											process.start(task);
-										}
-										Autorestart::Unexpected => {
-											if status.code().is_none() || !task.config.exitcodes.contains(&status.code().unwrap_or(0)) {
-												process.start(task);
-											} else {
-												process.status = Status::Stopped;
-											}
-										}
-										Autorestart::Never => { process.status = Status::Stopped }
-									}
-								}
-	
-							}
-						}
-						Ok(None) => {
-							Monitor::check_state(process, task);
-						}
-						Err(e) => println!("error attempting to wait: {}", e),
-					}
-				}
+			for (_name, task) in self.tasks.iter_mut() {
+				task.try_wait();
 			}
-			if self.shutdown {
-				if self.count_active_processes() == 0 {
-					exit(0);
-				} else {
-					continue;
-				}
+			if self.shutdown && !self.process_still_alive() {
+				exit(0);
 			}
 			self.receive_terminal_command();
 		}
@@ -128,8 +59,8 @@ impl Monitor {
 					CommandName::START => {
 						for arg in args {
 							if let Some(task) = self.tasks.get_mut(arg.name.as_str()) {
-								println!("arg:{:?}", arg);
-								task.start(&mut self.processes, arg.id);
+								// println!("arg:{:?}", arg);
+								task.start(arg.id);
 							} else {
 								eprintln!("Task {} not found", arg.name);
 							}
@@ -138,7 +69,7 @@ impl Monitor {
 					CommandName::STOP => {
 						for arg in args {
 							if let Some(task) = self.tasks.get_mut(arg.name.as_str()) {
-								task.stop(&mut self.processes, arg.id);
+								task.stop(arg.id);
 							} else {
 								eprintln!("Task {} not found", arg.name);
 							}
@@ -147,7 +78,7 @@ impl Monitor {
 					CommandName::RESTART => {
 						for arg in args {
 							if let Some(task) = self.tasks.get_mut(arg.name.as_str()) {
-								task.restart(&mut self.processes, arg.id);
+								task.restart(arg.id);
 							} else {
 								eprintln!("Task {} not found", arg.name);
 							}
@@ -156,11 +87,17 @@ impl Monitor {
 					CommandName::STATUS => {
 						self.print_status(args);
 					}
+					CommandName::UPDATE => {
+						match self.update() {
+							Ok(()) => {},
+							Err(e) => { eprintln!("{:?}", e) }
+						}
+					}
 					CommandName::SHUTDOWN => {
 						println!("Shutting down . . .");
 						self.shutdown = true;
 						for (_, task) in &mut self.tasks {
-							task.stop(&mut self.processes, "*".to_string());
+							task.stop("*".to_string());
 						}
 					}
 				}
@@ -169,8 +106,26 @@ impl Monitor {
 		}
 	}
 
-	fn count_active_processes(&self) -> usize {
-		self.processes.iter().filter(|p| p.status != Status::Stopped && p.status != Status::Fatal).count()
+	fn process_still_alive(&self) -> bool {
+		self.tasks.iter().any(|(_, task)| {
+			task.processes.iter().any(|p| {
+				p.status != Status::Stopped && p.status != Status::Fatal
+			})
+		})
+	}
+
+	fn update(&mut self) -> Result<(), Box<dyn Error>> {
+		let configs: BTreeMap<String, Config> = parse_config_file(&self.config_path)?;
+		for (name, task) in &mut self.tasks {
+			if let Some(config) = configs.get(name) {
+				if task.config != *config {
+					println!("diff");
+				} else {
+					println!("no diff");
+				}
+			}
+		}
+		Ok(())
 	}
 
 	pub fn print_status(&mut self, args: Vec<ProcessArg>) {
@@ -178,12 +133,12 @@ impl Monitor {
 		println!("------------------------------------------------------------------------");
 		if args.is_empty() {
 			for (_name, task) in &mut self.tasks {
-				task.print_processes(&mut self.processes, "*".to_string());
+				task.print_processes("*".to_string());
 			}
 		} else {
 			for arg in args {
 				if let Some(task) = self.tasks.get_mut(arg.name.as_str()) {
-					task.print_processes(&mut self.processes, arg.id);
+					task.print_processes(arg.id);
 				} else {
 					eprintln!("Task {} not found", arg.name);
 				}
