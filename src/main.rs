@@ -69,47 +69,40 @@ fn set_cmd_output(cmd: &mut Command, path: &Option<String>, stdout: bool) -> Res
 	}
 }
 
-fn create_task_and_processes(config: BTreeMap<String, Config>) -> HashMap<String, Task> {
-	let mut tasks: HashMap<String, Task> = HashMap::new();
-	// let mut processes: Vec<Process> = vec![];
+fn create_task_and_processes(name: String, config: Config) -> (String, Task) {
+	let mut task = Task::new(config, name.clone());
+	let cmd_split: VecDeque<&str> = task.config.cmd.split_whitespace().collect();
 	
-	for(name, config) in config {
-		
-		let mut task = Task::new(config, name.clone());
-		let cmd_split: VecDeque<&str> = task.config.cmd.split_whitespace().collect();
-		
-		for id in 0..task.config.numprocs {
-			let mut error: Option<Box<dyn Error>> = None;
-			let mut cmd_splited = cmd_split.clone();
-			let mut cmd = match cmd_splited.pop_front() {
-				Some(cmd_str) => Command::new(cmd_str),
-				None => {
-					error = Some(Box::new(io::Error::new(io::ErrorKind::Other, "Command is empty")));
-					Command::new("")
-				}
-			};
-			if let Some(env) = &task.config.env {
-				cmd.envs(env);
+	for id in 0..task.config.numprocs {
+		let mut error: Option<Box<dyn Error>> = None;
+		let mut cmd_splited = cmd_split.clone();
+		let mut cmd = match cmd_splited.pop_front() {
+			Some(cmd_str) => Command::new(cmd_str),
+			None => {
+				error = Some(Box::new(io::Error::new(io::ErrorKind::Other, "Command is empty")));
+				Command::new("")
 			}
-			cmd.args(cmd_splited.clone());
-			cmd.current_dir(task.config.workingdir.as_str());
+		};
+		if let Some(env) = &task.config.env {
+			cmd.envs(env);
+		}
+		cmd.args(cmd_splited.clone());
+		cmd.current_dir(task.config.workingdir.as_str());
 
-			if let Err(e) = set_cmd_output(&mut cmd, &task.config.stdout, true) {
-				error = Some(Box::new(e));
-			}
-			if let Err(e) = set_cmd_output(&mut cmd, &task.config.stdout, false) {
-				error = Some(Box::new(e));
-			}
-			let mut process = Process::new(id, name.clone(), cmd, task.config.umask);
-			process.error = error;
-            if task.config.autostart {
-                process.start();
-            }
-            task.processes.push(process);
-        }
-        tasks.insert(name, task);
-    }
-	tasks
+		if let Err(e) = set_cmd_output(&mut cmd, &task.config.stdout, true) {
+			error = Some(Box::new(e));
+		}
+		if let Err(e) = set_cmd_output(&mut cmd, &task.config.stdout, false) {
+			error = Some(Box::new(e));
+		}
+		let mut process = Process::new(id, name.clone(), cmd, task.config.umask);
+		process.error = error;
+		if task.config.autostart {
+			process.start();
+		}
+		task.processes.push(process);
+	}
+	(name, task)
 }
 
 fn main() {
@@ -139,6 +132,7 @@ fn main() {
 		Ok(cfg) => cfg,
 		Err(e) => { print_exit!(e, 1); }
 	};
+
 	// if !path.try_exists().expect("Unable to check file existence.")
 	// {
 	// 	print_exit!("Invalid path.", 1);
@@ -154,7 +148,11 @@ fn main() {
 	// file.read_to_string(&mut content)
 	// 	.expect("Could not read file...");
     let (sender, receiver): (Sender<TermInput>, Receiver<TermInput>) = mpsc::channel();
-	let tasks = create_task_and_processes(config);
+	let mut tasks: HashMap<String, Task> = HashMap::new();
+	for (name, config) in config {
+		let (name, task) = create_task_and_processes(name, config);
+		tasks.insert(name, task);
+	}
 
     let mut monitor = Monitor::new(tasks, receiver, path); //Todo: Get real path
     let _th = thread::spawn(move || {
