@@ -3,7 +3,7 @@ use std::{collections::{HashMap, BTreeMap}, sync::{mpsc::Receiver, Arc, atomic::
 use libc::{SIGHUP, signal};
 pub static RELOAD: AtomicBool = AtomicBool::new(false);
 
-use crate::{process::{Status}, task::{Task}, terminal::{TermInput, ProcessArg}, task_utils::Config, parse_config_file};
+use crate::{process::{Status}, task::{Task}, terminal::{TermInput, ProcessArg}, task_utils::Config, parse_config_file, create_task_and_processes};
 
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub enum CommandName {
@@ -115,16 +115,21 @@ impl Monitor {
 	}
 
 	fn update(&mut self) -> Result<(), Box<dyn Error>> {
-		let configs: BTreeMap<String, Config> = parse_config_file(&self.config_path)?;
+		let mut configs: BTreeMap<String, Config> = parse_config_file(&self.config_path)?;
 		for (name, task) in &mut self.tasks {
-			if let Some(config) = configs.get(name) {
-				if task.config != *config {
-					println!("diff");
+			if let Some(config) = configs.remove(name) {
+				if task.config != config {
+					task.stop("*".to_string());
+					task.wait_procs_to_stop();
+					*task = create_task_and_processes(name.clone(), config).1;
 				} else {
 					println!("no diff");
 				}
 			}
 		}
+		// for (name, config) in configs {
+
+		// }
 		Ok(())
 	}
 

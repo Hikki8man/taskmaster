@@ -139,4 +139,15 @@ impl Task {
             }
         }
     }
+
+    pub fn wait_procs_to_stop(&mut self) {
+        loop {
+            self.try_wait();
+            if !self.processes.iter().any(|p| {
+				p.status != Status::Stopped && p.status != Status::Fatal
+			}) {
+                break;
+            }
+        }
+    }
 }
