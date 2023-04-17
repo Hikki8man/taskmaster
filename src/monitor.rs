@@ -136,10 +136,8 @@ impl Monitor {
 		}
 		//START HANDLE NEW TASKS
 		for (name, config) in configs {
-			if let None = self.tasks.get(&name) {
-				let (name, new_task) = create_task_and_processes(name, config);
-				self.tasks.insert(name, new_task);
-			}
+			let (name, new_task) = create_task_and_processes(name, config);
+			self.tasks.insert(name, new_task);
 		}
 		println!("Update complete");
 		Ok(())
