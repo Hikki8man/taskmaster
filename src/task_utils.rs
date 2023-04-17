@@ -7,13 +7,13 @@ use crate::{Process};
 #[macro_export]
 macro_rules! print_process {
 	($proc_name:expr, $proc_status:expr) => {
-		println!("{:<15}\t-\t{}", $proc_name, $proc_status);
+		println!("{:<15.15}\t-\t{}", $proc_name, $proc_status);
 	};
 	($proc_name:expr, $proc_status:expr, $proc_pid:expr) => {
-		println!("{:<15}\t-\t{:<23}\t-\t{}", $proc_name, $proc_status, $proc_pid);
+		println!("{:<15.15}\t-\t{:<23}\t-\t{}", $proc_name, $proc_status, $proc_pid);
 	};
 	($proc_name:expr, $proc_status:expr, $proc_pid:expr, $proc_uptime:expr) => {
-		println!("{:<15}\t-\t{:<23}\t-\t{}\t-\t{}", $proc_name, $proc_status, $proc_pid, $proc_uptime);
+		println!("{:<15.15}\t-\t{:<23}\t-\t{}\t-\t{}", $proc_name, $proc_status, $proc_pid, $proc_uptime);
 	};
 }
 
