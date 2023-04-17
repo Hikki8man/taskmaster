@@ -25,7 +25,7 @@ pub enum Autorestart {
 	Never,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone, Copy)]
 pub enum Sigtype {
 	HUP,
 	INT,

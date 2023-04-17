@@ -95,7 +95,7 @@ fn create_task_and_processes(name: String, config: Config) -> (String, Task) {
 		if let Err(e) = set_cmd_output(&mut cmd, &task.config.stdout, false) {
 			error = Some(Box::new(e));
 		}
-		let mut process = Process::new(id, name.clone(), cmd, task.config.umask);
+		let mut process = Process::new(id, name.clone(), cmd, task.config.umask, task.config.stopsignal);
 		process.error = error;
 		if task.config.autostart {
 			process.start();
