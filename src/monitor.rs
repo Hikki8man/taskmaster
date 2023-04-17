@@ -123,6 +123,17 @@ impl Monitor {
 				} else {
 					println!("no diff");
 				}
+			} else {
+				//STOP DELETE TASK
+				println!("removed");
+			}
+		}
+		//START HANDLE NEW TASKS
+		for (name, task) in configs {
+			if let Some(config) = self.tasks.get(&name) {
+				continue ;
+			} else {
+				println!("not found");
 			}
 		}
 		Ok(())
