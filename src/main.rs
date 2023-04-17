@@ -70,45 +70,38 @@ fn set_cmd_output(cmd: &mut Command, path: &Option<String>, stdout: bool) -> Res
 }
 
 fn create_task_and_processes(name: String, config: Config) -> (String, Task) {
-	// let mut tasks: HashMap<String, Task> = HashMap::new();
-	// let mut processes: Vec<Process> = vec![];
+	let mut task = Task::new(config, name.clone());
+	let cmd_split: VecDeque<&str> = task.config.cmd.split_whitespace().collect();
 	
-	// for(name, config) in config {
-		
-		let mut task = Task::new(config, name.clone());
-		let cmd_split: VecDeque<&str> = task.config.cmd.split_whitespace().collect();
-		
-		for id in 0..task.config.numprocs {
-			let mut error: Option<Box<dyn Error>> = None;
-			let mut cmd_splited = cmd_split.clone();
-			let mut cmd = match cmd_splited.pop_front() {
-				Some(cmd_str) => Command::new(cmd_str),
-				None => {
-					error = Some(Box::new(io::Error::new(io::ErrorKind::Other, "Command is empty")));
-					Command::new("")
-				}
-			};
-			if let Some(env) = &task.config.env {
-				cmd.envs(env);
+	for id in 0..task.config.numprocs {
+		let mut error: Option<Box<dyn Error>> = None;
+		let mut cmd_splited = cmd_split.clone();
+		let mut cmd = match cmd_splited.pop_front() {
+			Some(cmd_str) => Command::new(cmd_str),
+			None => {
+				error = Some(Box::new(io::Error::new(io::ErrorKind::Other, "Command is empty")));
+				Command::new("")
 			}
-			cmd.args(cmd_splited.clone());
-			cmd.current_dir(task.config.workingdir.as_str());
+		};
+		if let Some(env) = &task.config.env {
+			cmd.envs(env);
+		}
+		cmd.args(cmd_splited.clone());
+		cmd.current_dir(task.config.workingdir.as_str());
 
-			if let Err(e) = set_cmd_output(&mut cmd, &task.config.stdout, true) {
-				error = Some(Box::new(e));
-			}
-			if let Err(e) = set_cmd_output(&mut cmd, &task.config.stdout, false) {
-				error = Some(Box::new(e));
-			}
-			let mut process = Process::new(id, name.clone(), cmd, task.config.umask);
-			process.error = error;
-            if task.config.autostart {
-                process.start();
-            }
-            task.processes.push(process);
-        }
-        // tasks.insert(name, task);
-    // }
+		if let Err(e) = set_cmd_output(&mut cmd, &task.config.stdout, true) {
+			error = Some(Box::new(e));
+		}
+		if let Err(e) = set_cmd_output(&mut cmd, &task.config.stdout, false) {
+			error = Some(Box::new(e));
+		}
+		let mut process = Process::new(id, name.clone(), cmd, task.config.umask);
+		process.error = error;
+		if task.config.autostart {
+			process.start();
+		}
+		task.processes.push(process);
+	}
 	(name, task)
 }
 

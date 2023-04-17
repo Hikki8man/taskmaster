@@ -115,6 +115,7 @@ impl Monitor {
 	}
 
 	fn update(&mut self) -> Result<(), Box<dyn Error>> {
+		let mut to_remove: Vec<String> = vec![];
 		let mut configs: BTreeMap<String, Config> = parse_config_file(&self.config_path)?;
 		for (name, task) in &mut self.tasks {
 			if let Some(config) = configs.remove(name) {
@@ -122,25 +123,25 @@ impl Monitor {
 					task.stop("*".to_string());
 					task.wait_procs_to_stop();
 					*task = create_task_and_processes(name.clone(), config).1;
-				} else {
-					println!("no diff");
 				}
 			} else {
 				//STOP DELETE TASK
-				println!("removed");
+				task.stop("*".to_string());
+				task.wait_procs_to_stop();
+				to_remove.push(name.clone());
 			}
+		}
+		for name in to_remove {
+			self.tasks.remove(name.as_str());
 		}
 		//START HANDLE NEW TASKS
-		for (name, task) in configs {
-			if let Some(config) = self.tasks.get(&name) {
-				continue ;
-			} else {
-				println!("not found");
+		for (name, config) in configs {
+			if let None = self.tasks.get(&name) {
+				let (name, new_task) = create_task_and_processes(name, config);
+				self.tasks.insert(name, new_task);
 			}
 		}
-		// for (name, config) in configs {
-
-		// }
+		println!("Update complete");
 		Ok(())
 	}
 
