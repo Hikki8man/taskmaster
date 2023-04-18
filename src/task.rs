@@ -142,4 +142,10 @@ impl Task {
             }
         }
     }
+
+    pub fn kill(&mut self) {
+        for proc in &mut self.processes {
+            proc.kill();
+        }
+    }
 }

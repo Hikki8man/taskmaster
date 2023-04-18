@@ -1,9 +1,9 @@
 use std::{collections::{HashMap, BTreeMap}, sync::{mpsc::Receiver, Arc, atomic::{AtomicBool, Ordering}}, process::{exit}, fs::{OpenOptions, File}, error::Error, io::Read, path::PathBuf};
-
+use crate::{process::{Status}, task::{Task}, terminal::{TermInput, ProcessArg}, task_utils::Config, parse_config_file, create_task_and_processes};
 use libc::{SIGHUP, signal};
+
 pub static RELOAD: AtomicBool = AtomicBool::new(false);
 
-use crate::{process::{Status}, task::{Task}, terminal::{TermInput, ProcessArg}, task_utils::Config, parse_config_file, create_task_and_processes};
 
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub enum CommandName {
@@ -13,6 +13,7 @@ pub enum CommandName {
 	UPDATE,
     STATUS,
 	SHUTDOWN,
+	KILL,
 }
 
 pub struct Monitor {
@@ -24,7 +25,6 @@ pub struct Monitor {
 
 impl Monitor {
 	pub fn new(tasks: HashMap<String, Task>, receiver: Receiver<TermInput>, config_path: PathBuf) -> Monitor {
-		// self::reload = Arc::new(AtomicBool::new(false));
 		unsafe { signal(SIGHUP, Self::handle_sighup_signal as usize)};
 		let mut monitor = Monitor { tasks, receiver, config_path, shutdown: false };
 		monitor.print_status(vec![]);
@@ -37,9 +37,6 @@ impl Monitor {
 
 	pub fn task_manager_loop(&mut self) {
 		loop {
-			if RELOAD.load(Ordering::SeqCst) == true {
-				RELOAD.store(false, Ordering::SeqCst);
-			}
 			for (_name, task) in self.tasks.iter_mut() {
 				task.try_wait();
 			}
@@ -47,6 +44,13 @@ impl Monitor {
 				exit(0);
 			}
 			self.receive_terminal_command();
+			if RELOAD.load(Ordering::SeqCst) == true {
+				RELOAD.store(false, Ordering::SeqCst);
+				match self.update() {
+					Ok(()) => {},
+					Err(e) => { eprintln!("{:?}", e) }
+				}
+			}
 		}
 	}
 
@@ -99,6 +103,13 @@ impl Monitor {
 						for (_, task) in &mut self.tasks {
 							task.stop("*".to_string());
 						}
+					}
+					CommandName::KILL => {
+						println!("Shutting down murdering all childs :( . . .");
+						for (_, task) in &mut self.tasks {
+							task.kill();
+						}
+						exit(0);
 					}
 				}
 			}

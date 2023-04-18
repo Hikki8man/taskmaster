@@ -1,7 +1,7 @@
 loop:
   cmd: bash test.sh
   numprocs: 1
-  # umask: 022
+  umask: 000
   workingdir: "."
   autostart: true
   autorestart: unexpected
@@ -14,21 +14,21 @@ loop:
   stdout: output.txt
   # stderr: err.txt
 
-task:
-  cmd: "./test.sh"
-  numprocs: 2
-  umask: 0022
-  workingdir: "."
-  autostart: true
-  autorestart: unexpected
-  exitcodes:
-    - 0
-  startretries: 2
-  starttime: 10
-  stopsignal: TERM
-  stoptime: 10
-  stdout: output.txt
-  stderr: err.txt
+# task:
+#   cmd: "./test.sh"
+#   numprocs: 2
+#   umask: 0022
+#   workingdir: "."
+#   autostart: true
+#   autorestart: unexpected
+#   exitcodes:
+#     - 1
+#   startretries: 2
+#   starttime: 10
+#   stopsignal: TERM
+#   stoptime: 10
+#   stdout: ./output.txt
+#   stderr: err.txt
 
 # tache:
 #   cmd: "bash test.sh"

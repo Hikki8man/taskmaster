@@ -3,12 +3,14 @@ use std::{io::{self, Read, stdout, Write}, sync::mpsc::Sender, process::exit, ff
 use crate::monitor::CommandName;
 use std::os::unix::io::AsRawFd;
 use std::mem;
-use libc::{self, c_int, tcgetattr, tcsetattr, TCSANOW, STDIN_FILENO, termios, ECHO, ICANON, ISIG, VMIN, VTIME, VINTR, VEOF, INPCK, ISTRIP, IXON};
+use libc::{self, c_int, tcgetattr, tcsetattr, TCSANOW, STDIN_FILENO, termios, ECHO, ICANON, ISIG, VMIN, VTIME, VINTR, VEOF, INPCK, ISTRIP, IXON, BRKINT, CS8};
 
 const ENTER: char = '\n';
 const BACKSPACE: char = '\x7f';
 const TAB: char = '\t';
 const ARROW: char = '\x1B';
+const CTRLC: char = '\x03';
+const CTRL_BACK: char = '\x1c';
 const LEFT: &'static str = "[D";
 const RIGHT: &'static str = "[C";
 const UP: &'static str = "[A";
@@ -47,9 +49,9 @@ impl Terminal {
 		}
 	
 		let mut new_termios = orig_termios;
-		new_termios.c_lflag &= !(libc::ICANON | ECHO);
-		new_termios.c_iflag &= !(libc::BRKINT | INPCK | ISTRIP | IXON);
-		new_termios.c_cflag |= libc::CS8;
+		new_termios.c_lflag &= !(ICANON | ECHO | ISIG);
+		new_termios.c_iflag &= !(BRKINT | INPCK | ISTRIP | IXON);
+		new_termios.c_cflag |= CS8;
 	
 		if unsafe { tcsetattr(stdin, TCSANOW, &new_termios as *const _) } != 0 {
 			panic!("tcsetattr failed");
@@ -80,6 +82,10 @@ impl Terminal {
 					saved_word = None;
 				}
 				match c {
+					CTRLC | CTRL_BACK => {
+						Self::clear_line();
+						self.sender.send(TermInput::new(CommandName::KILL, vec![])).ok();
+					}
 					TAB => {
 						// Tab key pressed, complete the current word
 						if suggest_word.is_none() {

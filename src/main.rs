@@ -154,7 +154,7 @@ fn main() {
 		tasks.insert(name, task);
 	}
 
-    let mut monitor = Monitor::new(tasks, receiver, path); //Todo: Get real path
+    let mut monitor = Monitor::new(tasks, receiver, path);
     let _th = thread::spawn(move || {
 		let mut terminal: Terminal = Terminal::new(sender);
 		terminal.read_input();
