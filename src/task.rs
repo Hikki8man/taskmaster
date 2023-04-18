@@ -14,17 +14,19 @@ impl Task {
         Task { config, name, processes: vec![] }
     }
 
-    // fn get_procs_by_id(&mut self, id: String) -> impl Iterator<Item = &mut Process> {
-    //     self.processes.iter_mut().filter(move |e| e.id.to_string() == id || matches!(id.as_str(), "*"))
-    // }
-    
-    pub fn start(&mut self, id: String) {
-        let procs: Vec<&mut Process> = self.processes.iter_mut().filter(|e| e.id.to_string() == id || id == "*").collect();
+    fn get_procs_by_id(&mut self, id: String) -> Vec<&mut Process> {
+        let id_clone = id.clone();
+        let procs: Vec<&mut Process> = self.processes.iter_mut().filter(move |e| e.id.to_string() == id || matches!(id.as_str(), "*")).collect();
         match procs.is_empty() {
-            true if id == "*" => eprintln!("No processes found for task {}", self.name),
-            true =>  eprintln!("Process {}:{} not found", self.name, id),
+            true if id_clone == "*" => eprintln!("No processes found for task {}", self.name),
+            true =>  eprintln!("Process {}:{} not found", self.name, id_clone),
             false => {},
         }
+        procs
+    }
+    
+    pub fn start(&mut self, id: String) {
+        let procs = self.get_procs_by_id(id);
         for process in procs {
             process.retries = 0;
             process.start();
@@ -32,27 +34,17 @@ impl Task {
     }
 
     pub fn stop(&mut self, id: String) {
-        let procs: Vec<&mut Process> = self.processes.iter_mut().filter(|e| e.id.to_string() == id || id == "*").collect();
-        match procs.is_empty() {
-            true if id == "*" => eprintln!("No processes found for task {}", self.name),
-            true =>  eprintln!("Process {}:{} not found", self.name, id),
-            false => {},
-        }
+        let procs = self.get_procs_by_id(id);
         for process in procs {
-            process.stop(&self.config.stopsignal);
+            process.stop();
         }
     }
 
     pub fn restart(&mut self, id: String) {
-        let procs: Vec<&mut Process> = self.processes.iter_mut().filter(|e| e.id.to_string() == id || id == "*").collect();
-        match procs.is_empty() {
-            true if id == "*" => eprintln!("No processes found for task {}", self.name),
-            true =>  eprintln!("Process {}:{} not found", self.name, id),
-            false => {},
-        }
+        let procs = self.get_procs_by_id(id);
         for process in procs {
             process.retries = 0;
-            process.restart(&self.config.stopsignal);
+            process.restart();
         }
     }
 
@@ -148,6 +140,12 @@ impl Task {
 			}) {
                 break;
             }
+        }
+    }
+
+    pub fn kill(&mut self) {
+        for proc in &mut self.processes {
+            proc.kill();
         }
     }
 }

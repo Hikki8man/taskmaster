@@ -95,7 +95,7 @@ fn create_task_and_processes(name: String, config: Config) -> (String, Task) {
 		if let Err(e) = set_cmd_output(&mut cmd, &task.config.stdout, false) {
 			error = Some(Box::new(e));
 		}
-		let mut process = Process::new(id, name.clone(), cmd, task.config.umask);
+		let mut process = Process::new(id, name.clone(), cmd, task.config.umask, task.config.stopsignal);
 		process.error = error;
 		if task.config.autostart {
 			process.start();
@@ -154,7 +154,7 @@ fn main() {
 		tasks.insert(name, task);
 	}
 
-    let mut monitor = Monitor::new(tasks, receiver, path); //Todo: Get real path
+    let mut monitor = Monitor::new(tasks, receiver, path);
     let _th = thread::spawn(move || {
 		let mut terminal: Terminal = Terminal::new(sender);
 		terminal.read_input();

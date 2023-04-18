@@ -18,6 +18,7 @@ pub struct Process {
     cmd: Command,
     umask: u32,
     task_name: String,
+    stop_sig: Sigtype,
     pub child: Option<Child>,
     pub status: Status,
     pub retries: u32,
@@ -27,11 +28,12 @@ pub struct Process {
 }
 
 impl Process {
-    pub fn new(id: u32, task_name: String, cmd: Command, umask: u32) -> Process {
+    pub fn new(id: u32, task_name: String, cmd: Command, umask: u32, stop_sig: Sigtype) -> Process {
         Process {
             id,
             cmd,
             umask,
+            stop_sig,
             child: None,
             task_name,
             status: Status::Stopped,
@@ -63,12 +65,12 @@ impl Process {
         self.retries += 1;
     }
 
-    pub fn stop(&mut self, signal: &Sigtype) {
+    pub fn stop(&mut self) {
+        if self.status == Status::Stopping { return; }
         if let Some(child) = &self.child {
             let mut kill_cmd = Command::new("kill");
-            match kill_cmd.args(["-s", sigtype_to_string(&signal), child.id().to_string().as_str()]).output() {
+            match kill_cmd.args(["-s", sigtype_to_string(&self.stop_sig), child.id().to_string().as_str()]).output() {
                 Ok(_) => {
-                    //TODO check if supervisor restrain stop if already stopping
                     self.timer = Instant::now();
                     self.status = Status::Stopping;
                 }
@@ -77,8 +79,8 @@ impl Process {
         }
     }
 
-    pub fn restart(&mut self, signal: &Sigtype) {
-        self.stop(signal);
+    pub fn restart(&mut self) {
+        self.stop();
         self.status = Status::Restarting;
     }
 
