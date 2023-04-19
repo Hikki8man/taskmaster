@@ -3,10 +3,10 @@ mod terminal;
 mod process;
 mod task;
 mod monitor;
+mod logger;
 
 use process::Process;
 use task::Task;
-use task_utils::{print_config};
 use task_utils::Config;
 use std::collections::{HashMap, BTreeMap, VecDeque};
 use std::error::Error;
@@ -20,6 +20,7 @@ use std::sync::mpsc::{Sender, Receiver};
 use std::sync::mpsc;
 use std::process::{Command, Stdio};
 
+use crate::logger::Logger;
 use crate::monitor::Monitor;
 use crate::terminal::{TermInput, Terminal};
 
@@ -153,6 +154,9 @@ fn main() {
 		let (name, task) = create_task_and_processes(name, config);
 		tasks.insert(name, task);
 	}
+
+	let mut logger = Logger::new();
+	logger.write("buf");
 
     let mut monitor = Monitor::new(tasks, receiver, path);
     let _th = thread::spawn(move || {

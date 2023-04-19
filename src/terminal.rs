@@ -37,6 +37,7 @@ pub struct ProcessArg {
 pub struct Terminal {
 	sender: Sender<TermInput>,
 	history: Vec<String>,
+	orig_termios: termios,
 }
 
 impl Terminal {
@@ -59,8 +60,18 @@ impl Terminal {
 
 		Terminal {
 			sender,
+			orig_termios,
 			history: Vec::new(),
 		}
+	}
+
+	pub fn reset_term(&self) {
+		let stdin = io::stdin().as_raw_fd();
+		//TODO WRAP
+		if unsafe { tcsetattr(stdin, TCSANOW, &self.orig_termios as *const _) } != 0 {
+			panic!("tcsetattr failed");
+		}
+
 	}
 
 	pub fn read_input(&mut self) {
@@ -84,6 +95,7 @@ impl Terminal {
 				match c {
 					CTRLC | CTRL_BACK => {
 						Self::clear_line();
+						self.reset_term();
 						self.sender.send(TermInput::new(CommandName::KILL, vec![])).ok();
 					}
 					TAB => {
@@ -126,7 +138,7 @@ impl Terminal {
 						println!("{}", word);
 						self.history.push(word.clone());
 						index_history = self.history.len();
-						Self::check_input(word.clone(), &self.sender);
+						self.check_input(word.clone(), &self.sender);
 						word.clear();
 					}
 					BACKSPACE => {
@@ -269,7 +281,7 @@ impl Terminal {
 		(cmd, args)
 	}
 	
-	fn check_input(input: String, sender: &Sender<TermInput>) {
+	fn check_input(&self, input: String, sender: &Sender<TermInput>) {
 		let input: Vec<&str> = input.split_whitespace().collect();
 		if input.is_empty() {
 			return;
@@ -309,6 +321,7 @@ impl Terminal {
 					println!("start    stop    restart    status");
 				}
 				"shutdown" => {
+					self.reset_term();
 					sender.send(TermInput::new(CommandName::SHUTDOWN, args)).ok();
 				}
 				_ => {
