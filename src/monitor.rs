@@ -1,5 +1,5 @@
-use std::{collections::{HashMap, BTreeMap}, sync::{mpsc::Receiver, Arc, atomic::{AtomicBool, Ordering}}, process::{exit}, fs::{OpenOptions, File}, error::Error, io::Read, path::PathBuf};
-use crate::{process::{Status}, task::{Task}, terminal::{TermInput, ProcessArg}, task_utils::Config, parse_config_file, create_task_and_processes};
+use std::{collections::{HashMap, BTreeMap, VecDeque}, sync::{mpsc::Receiver, Arc, atomic::{AtomicBool, Ordering}}, process::{exit, Command, Stdio}, fs::{OpenOptions, File}, error::Error, io::{Read, self}, path::PathBuf};
+use crate::{process::{Status, Process}, task::{Task}, terminal::{TermInput, ProcessArg}, task_utils::Config, parse_config_file, logger::Logger};
 use libc::{SIGHUP, signal};
 
 pub static RELOAD: AtomicBool = AtomicBool::new(false);
@@ -21,14 +21,87 @@ pub struct Monitor {
 	receiver: Receiver<TermInput>,
 	config_path: PathBuf,
 	shutdown: bool,
+	logger: Logger,
 }
 
 impl Monitor {
-	pub fn new(tasks: HashMap<String, Task>, receiver: Receiver<TermInput>, config_path: PathBuf) -> Monitor {
+	pub fn new(config: BTreeMap<String, Config>, receiver: Receiver<TermInput>, config_path: PathBuf) -> Monitor {
 		unsafe { signal(SIGHUP, Self::handle_sighup_signal as usize)};
-		let mut monitor = Monitor { tasks, receiver, config_path, shutdown: false };
+		let mut tasks: HashMap<String, Task> = HashMap::new();
+		let mut logger = Logger::new();
+		for (name, config) in config {
+			let (name, task) = Self::create_task_and_processes(name, config, &mut logger);
+			tasks.insert(name, task);
+		}
+		let mut monitor = Monitor { tasks, receiver, config_path, shutdown: false, logger };
 		monitor.print_status(vec![]);
 		return monitor;
+	}
+
+	fn create_task_and_processes(name: String, config: Config, logger: &mut Logger) -> (String, Task) {
+		let mut task = Task::new(config, name.clone());
+		let cmd_split: VecDeque<&str> = task.config.cmd.split_whitespace().collect();
+		
+		for id in 0..task.config.numprocs {
+			let mut error: Option<Box<dyn Error>> = None;
+			let mut cmd_splited = cmd_split.clone();
+			let mut cmd = match cmd_splited.pop_front() {
+				Some(cmd_str) => Command::new(cmd_str),
+				None => {
+					error = Some(Box::new(io::Error::new(io::ErrorKind::Other, "Command is empty")));
+					Command::new("")
+				}
+			};
+			if let Some(env) = &task.config.env {
+				cmd.envs(env);
+			}
+			cmd.args(cmd_splited.clone());
+			cmd.current_dir(task.config.workingdir.as_str());
+	
+			if let Err(e) = Self::set_cmd_output(&mut cmd, &task.config.stdout, true) {
+				error = Some(Box::new(e));
+			}
+			if let Err(e) = Self::set_cmd_output(&mut cmd, &task.config.stdout, false) {
+				error = Some(Box::new(e));
+			}
+			let mut process = Process::new(id, name.clone(), cmd, task.config.umask, task.config.stopsignal);
+			process.error = error;
+			if task.config.autostart {
+				process.start(logger);
+			}
+			task.processes.push(process);
+		}
+		(name, task)
+	}
+
+	fn set_cmd_output(cmd: &mut Command, path: &Option<String>, stdout: bool) -> Result<(), io::Error> {
+		if let Some(path) = path {
+			match OpenOptions::new().create(true).append(true).write(true).open(path) {
+				Ok(file) => {
+					if stdout {
+						cmd.stdout(file);
+					} else {
+						cmd.stderr(file);
+					}
+					Ok(())
+				}
+				Err(e) => {
+					if stdout {
+						cmd.stdout(Stdio::null());
+					} else {
+						cmd.stderr(Stdio::null());
+					}
+					Err(e)
+				}
+			}
+		} else {
+			if stdout {
+				cmd.stdout(Stdio::null());
+			} else {
+				cmd.stderr(Stdio::null());
+			}
+			Ok(())
+		}
 	}
 
 	fn handle_sighup_signal(_: i32) {
@@ -38,7 +111,7 @@ impl Monitor {
 	pub fn task_manager_loop(&mut self) {
 		loop {
 			for (_name, task) in self.tasks.iter_mut() {
-				task.try_wait();
+				task.try_wait(&mut self.logger);
 			}
 			if self.shutdown && !self.process_still_alive() {
 				exit(0);
@@ -63,8 +136,7 @@ impl Monitor {
 					CommandName::START => {
 						for arg in args {
 							if let Some(task) = self.tasks.get_mut(arg.name.as_str()) {
-								// println!("arg:{:?}", arg);
-								task.start(arg.id);
+								task.start(arg.id, &mut self.logger);
 							} else {
 								eprintln!("Task {} not found", arg.name);
 							}
@@ -73,7 +145,7 @@ impl Monitor {
 					CommandName::STOP => {
 						for arg in args {
 							if let Some(task) = self.tasks.get_mut(arg.name.as_str()) {
-								task.stop(arg.id);
+								task.stop(arg.id, &mut self.logger);
 							} else {
 								eprintln!("Task {} not found", arg.name);
 							}
@@ -82,7 +154,7 @@ impl Monitor {
 					CommandName::RESTART => {
 						for arg in args {
 							if let Some(task) = self.tasks.get_mut(arg.name.as_str()) {
-								task.restart(arg.id);
+								task.restart(arg.id, &mut self.logger);
 							} else {
 								eprintln!("Task {} not found", arg.name);
 							}
@@ -101,13 +173,13 @@ impl Monitor {
 						println!("Shutting down . . .");
 						self.shutdown = true;
 						for (_, task) in &mut self.tasks {
-							task.stop("*".to_string());
+							task.stop("*".to_string(), &mut self.logger);
 						}
 					}
 					CommandName::KILL => {
 						println!("Shutting down murdering all childs :( . . .");
 						for (_, task) in &mut self.tasks {
-							task.kill();
+							task.kill(&mut self.logger);
 						}
 						exit(0);
 					}
@@ -131,14 +203,14 @@ impl Monitor {
 		for (name, task) in &mut self.tasks {
 			if let Some(config) = configs.remove(name) {
 				if task.config != config {
-					task.stop("*".to_string());
-					task.wait_procs_to_stop();
-					*task = create_task_and_processes(name.clone(), config).1;
+					task.stop("*".to_string(), &mut self.logger);
+					task.wait_procs_to_stop(&mut self.logger);
+					*task = Self::create_task_and_processes(name.clone(), config, &mut self.logger).1;
 				}
 			} else {
 				//STOP DELETE TASK
-				task.stop("*".to_string());
-				task.wait_procs_to_stop();
+				task.stop("*".to_string(), &mut self.logger);
+				task.wait_procs_to_stop(&mut self.logger);
 				to_remove.push(name.clone());
 			}
 		}
@@ -147,7 +219,7 @@ impl Monitor {
 		}
 		//START HANDLE NEW TASKS
 		for (name, config) in configs {
-			let (name, new_task) = create_task_and_processes(name, config);
+			let (name, new_task) = Self::create_task_and_processes(name, config, &mut self.logger);
 			self.tasks.insert(name, new_task);
 		}
 		println!("Update complete");

@@ -1,6 +1,6 @@
-use std::{process::{Child, Command}, time::{Instant, Duration}, error::Error};
+use std::{process::{Child, Command}, time::{Instant, Duration}, error::Error, io::{self, Write}};
 use libc::{self, mode_t, umask};
-use crate::{task_utils::{sigtype_to_string, Sigtype, Config}};
+use crate::{task_utils::{Sigtype, Config}, logger::Logger};
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Status {
@@ -17,8 +17,8 @@ pub struct Process {
     pub id: u32,
     cmd: Command,
     umask: u32,
-    task_name: String,
     stop_sig: Sigtype,
+    pub task_name: String,
     pub child: Option<Child>,
     pub status: Status,
     pub retries: u32,
@@ -44,7 +44,7 @@ impl Process {
         }
     }
 
-    pub fn start(&mut self) {
+    pub fn start(&mut self, logger: &mut Logger) {
         if let Some(_child) = &self.child {
             return println!("Process {}:{} is already running", self.task_name, self.id);
         }
@@ -54,6 +54,7 @@ impl Process {
                 Ok(child) => {
                     self.status = Status::Starting;
                     self.timer = Instant::now();
+                    logger.write(format!("INFO spawned: '{}:{}' with pid {}", self.task_name, self.id, child.id()));
                     self.child = Some(child);
                 }
                 Err(error) => { self.error = Some(Box::new(error)) }
@@ -65,12 +66,15 @@ impl Process {
         self.retries += 1;
     }
 
-    pub fn stop(&mut self) {
-        if self.status == Status::Stopping { return; }
+    pub fn stop(&mut self, logger: &mut Logger) {
+        // if self.status != Status::Running { return; }
+        let sig_code = self.stop_sig as u32;
+        let sig_format = format!("-{}", sig_code);
         if let Some(child) = &self.child {
             let mut kill_cmd = Command::new("kill");
-            match kill_cmd.args(["-s", sigtype_to_string(&self.stop_sig), child.id().to_string().as_str()]).output() {
+            match kill_cmd.args([&sig_format, child.id().to_string().as_str()]).output() {
                 Ok(_) => {
+                    logger.write(format!("INFO waiting for '{}:{}' to stop", self.task_name, self.id));
                     self.timer = Instant::now();
                     self.status = Status::Stopping;
                 }
@@ -79,15 +83,22 @@ impl Process {
         }
     }
 
-    pub fn restart(&mut self) {
-        self.stop();
-        self.status = Status::Restarting;
+    pub fn restart(&mut self, logger: &mut Logger) {
+        match self.status {
+            Status::Stopped => self.start(logger),
+            _ => {
+                self.stop(logger);
+                self.status = Status::Restarting;
+            }
+        }
     }
 
-    pub fn kill(&mut self) {
+    pub fn kill(&mut self, logger: &mut Logger) {
         if let Some(child) = &mut self.child {
+            logger.write(format!("Warn killing '{}:{}' ({}) with SIGKILL", self.task_name, self.id, child.id()));
             match child.kill() {
                 Ok(_) => {
+                    logger.write(format!("INFO exited: '{}:{}' (terminated by SIGKILL)", self.task_name, self.id));
                     self.child = None;
                     self.status = Status::Stopped;
                 }
@@ -101,26 +112,27 @@ impl Process {
         old_umask
     }
 
-    pub fn check_process_state(&mut self, config: &Config) {
+    pub fn check_process_state(&mut self, config: &Config, logger: &mut Logger) {
         match self.status {
             Status::Starting => {
                 if self.timer.elapsed() > Duration::new(config.starttime as u64, 0) {
                     self.retries = 0;
                     self.status = Status::Running;
                     self.uptime = Instant::now();
+                    logger.write(format!("INFO success: '{}:{}' is now in a running state", self.task_name, self.id));
                     println!("{}:{} is now running", self.task_name, self.id);
                 }
             }
             Status::Stopping => {
                 if self.timer.elapsed() > Duration::new(config.stoptime as u64, 0) {
-                    self.kill();
+                    self.kill(logger);
                     println!("{}:{} is now stopped", self.task_name, self.id);
                 }
             }
             Status::Restarting => {
                 if self.timer.elapsed() > Duration::new(config.stoptime as u64, 0) {
-                    self.kill();
-                    self.start();
+                    self.kill(logger);
+                    self.start(logger);
                 }
             }
             _ => {}

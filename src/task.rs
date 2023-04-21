@@ -1,6 +1,6 @@
-use std::{vec};
+use std::{vec, os::unix::process::ExitStatusExt, process::ExitStatus};
 
-use crate::{task_utils::{Config, Autorestart}, process::{Process, Status}, print_process};
+use crate::{task_utils::{Config, Autorestart, Sigtype}, process::{Process, Status}, print_process, logger::Logger};
 
 #[derive(Debug)]
 pub struct Task {
@@ -25,26 +25,26 @@ impl Task {
         procs
     }
     
-    pub fn start(&mut self, id: String) {
+    pub fn start(&mut self, id: String, logger: &mut Logger) {
         let procs = self.get_procs_by_id(id);
         for process in procs {
             process.retries = 0;
-            process.start();
+            process.start(logger);
         }
     }
 
-    pub fn stop(&mut self, id: String) {
+    pub fn stop(&mut self, id: String, logger: &mut Logger) {
         let procs = self.get_procs_by_id(id);
         for process in procs {
-            process.stop();
+            process.stop(logger);
         }
     }
 
-    pub fn restart(&mut self, id: String) {
+    pub fn restart(&mut self, id: String, logger: &mut Logger) {
         let procs = self.get_procs_by_id(id);
         for process in procs {
             process.retries = 0;
-            process.restart();
+            process.restart(logger);
         }
     }
 
@@ -89,31 +89,51 @@ impl Task {
         }
 	}
 
-    pub fn try_wait(&mut self) {
+    fn get_formated_exit_string(exit_status: ExitStatus, code_expected: &Vec<i32>, process: &Process) -> String {
+        if let Some(exit_code) = exit_status.code() {
+            let expected = if code_expected.contains(&exit_code) {"expected"} else {"not expected"};
+            return match process.status {
+                Status::Starting => { format!("INFO exited: '{}:{}' (exit status {}; not expected)", process.task_name, process.id, exit_code) }
+                Status::Running => { format!("INFO exited: '{}:{}' (exit status {}; {})", process.task_name, process.id, exit_code, expected) }
+                _ => { format!("INFO stopped: '{}:{}' (exit status {})", process.task_name, process.id, exit_code) }
+            }
+       } else if let Some(signal) = exit_status.signal() {
+            return match process.status {
+                Status::Starting | Status::Running => { format!("INFO exited: '{}:{}' (terminated by SIG{}; not expected)", process.task_name, process.id, Sigtype::from(signal)) }
+                _ => { format!("INFO stopped: '{}:{}' (terminated by SIG{})", process.task_name, process.id, Sigtype::from(signal)) }
+            }
+       }
+       format!("INFO exited: '{}:{}' (unknown reason)", process.task_name, process.id)
+    }
+
+    pub fn try_wait(&mut self, logger: &mut Logger) {
         for process in self.processes.iter_mut() {
             if let Some(child) = &mut process.child {
                 match child.try_wait() {
                     Ok(Some(status)) => {
-                        println!("exit status: {:?}, Process status: {:?}", status.code(), process.status);
+                        logger.write(Self::get_formated_exit_string(status, &self.config.exitcodes, &process));
                         process.child = None;
                         match process.status {
                             Status::Starting => {
                                 if process.retries < self.config.startretries {
-                                    process.start();
+                                    process.start(logger);
                                 } else {
                                     process.status = Status::Fatal;
                                 }
                             }
-                            Status::Stopping => { process.status = Status::Stopped }
-                            Status::Restarting => {	process.start(); }
+                            Status::Stopping => { 
+                                process.status = Status::Stopped;
+                                println!("{}:{} is now stopped", self.name, process.id);
+                            }
+                            Status::Restarting => {	process.start(logger); }
                             _ => {
                                 match self.config.autorestart {
                                     Autorestart::Always => {
-                                        process.start();
+                                        process.start(logger);
                                     }
                                     Autorestart::Unexpected => {
                                         if status.code().is_none() || !self.config.exitcodes.contains(&status.code().unwrap_or(0)) {
-                                            process.start();
+                                            process.start(logger);
                                         } else {
                                             process.status = Status::Stopped;
                                         }
@@ -124,17 +144,17 @@ impl Task {
                         }
                     }
                     Ok(None) => {
-                        process.check_process_state(&self.config);
+                        process.check_process_state(&self.config, logger);
                     }
-                    Err(e) => println!("error attempting to wait: {}", e),
+                    Err(e) => eprintln!("error attempting to wait: {}", e),
                 }
             }
         }
     }
 
-    pub fn wait_procs_to_stop(&mut self) {
+    pub fn wait_procs_to_stop(&mut self, logger: &mut Logger) {
         loop {
-            self.try_wait();
+            self.try_wait(logger);
             if !self.processes.iter().any(|p| {
 				p.status != Status::Stopped && p.status != Status::Fatal
 			}) {
@@ -143,9 +163,9 @@ impl Task {
         }
     }
 
-    pub fn kill(&mut self) {
+    pub fn kill(&mut self, logger: &mut Logger) {
         for proc in &mut self.processes {
-            proc.kill();
+            proc.kill(logger);
         }
     }
 }
